@@ -94,7 +94,7 @@ async def mark_scraped(
 def _build_extra(loc: Location) -> dict[str, Any]:
     """Merge location-type-specific fields into the extra dict."""
     extra = dict(loc.extra)
-    from models import Apartment, Gym, Hospital
+    from models import Apartment, Gym, Hospital, PointOfInterest
     if isinstance(loc, Apartment) and loc.apartments_com_slug:
         extra["apartments_com_slug"] = loc.apartments_com_slug
     if isinstance(loc, (Gym, Hospital)):
@@ -106,4 +106,6 @@ def _build_extra(loc: Location) -> dict[str, Any]:
         extra["equipment_highlights"] = loc.equipment_highlights
     if isinstance(loc, Hospital) and loc.health_system:
         extra["health_system"] = loc.health_system
+    if isinstance(loc, PointOfInterest) and loc.category:
+        extra["category"] = loc.category
     return extra
