@@ -45,13 +45,13 @@ if "%choice%"=="6" python main.py diff
 goto done
 
 :web
-echo   Starting dashboard... opening browser in 3 seconds.
-start "" /b python main.py web
+echo   Opening browser in 3 seconds...
 timeout /t 3 /nobreak >nul
 start "" http://localhost:8000
-echo   Server is running. Close this window to stop it.
-echo   (or press Ctrl+C to stop the server)
-wait
+echo   Server is running at http://localhost:8000
+echo   Press Ctrl+C to stop.
+echo.
+python main.py web
 
 :done
 if errorlevel 1 echo.& echo [ERROR] Command failed. See above for details.
