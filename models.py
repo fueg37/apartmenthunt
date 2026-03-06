@@ -162,9 +162,16 @@ def location_from_row(row: dict) -> Location:
 def _type_extras(lt: LocationType, extra: dict) -> dict:
     if lt == LocationType.APARTMENT:
         return {"apartments_com_slug": extra.get("apartments_com_slug")}
-    if lt in (LocationType.GYM, LocationType.HOSPITAL):
+    if lt == LocationType.GYM:
         return {
             "google_place_id": extra.get("google_place_id"),
             "hours": extra.get("hours"),
+            "equipment_highlights": extra.get("equipment_highlights", []),
+        }
+    if lt == LocationType.HOSPITAL:
+        return {
+            "google_place_id": extra.get("google_place_id"),
+            "hours": extra.get("hours"),
+            "health_system": extra.get("health_system"),
         }
     return {}

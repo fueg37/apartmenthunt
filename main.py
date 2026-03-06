@@ -5,6 +5,7 @@ Commands:
   seed      Seed the DB with known apartments, gyms, and hospitals
   show      Display tracked locations (with optional filters)
   add       Add a new location to track
+  add-file  Bulk import locations from CSV/JSON
   scrape    Scrape live data for tracked locations
   search    Find new apartments via apartments.com
   diff      Show what changed since the last scrape
@@ -56,10 +57,38 @@ def add(
     website: Optional[str] = typer.Option(None, "--website", help="Website URL"),
     top_pick: bool = typer.Option(False, "--top-pick", help="Mark as a top pick"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Personal notes"),
+    apartments_com_slug: Optional[str] = typer.Option(None, "--apartments-com-slug", help="apartments.com slug for apartments"),
+    google_place_id: Optional[str] = typer.Option(None, "--google-place-id", help="Google Place ID for gyms/hospitals"),
+    hours: Optional[str] = typer.Option(None, "--hours", help="Operating hours for gyms/hospitals"),
+    equipment_highlight: list[str] = typer.Option([], "--equipment-highlight", help="Gym equipment highlight (repeat flag)"),
+    health_system: Optional[str] = typer.Option(None, "--health-system", help="Health system for hospitals"),
 ) -> None:
     """Manually add a new location to track."""
     from commands.add import run
-    run(name, address, lat, lon, loc_type, website, top_pick, notes)
+    run(
+        name,
+        address,
+        lat,
+        lon,
+        loc_type,
+        website,
+        top_pick,
+        notes,
+        apartments_com_slug,
+        google_place_id,
+        hours,
+        equipment_highlight,
+        health_system,
+    )
+
+
+@app.command("add-file")
+def add_file(
+    path: str = typer.Option(..., "--path", "-p", help="Path to .csv or .json file of location records"),
+) -> None:
+    """Bulk import locations from a CSV/JSON file."""
+    from commands.add import import_file
+    import_file(path)
 
 
 @app.command()
