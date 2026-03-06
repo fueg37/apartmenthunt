@@ -61,6 +61,18 @@
       cursor: pointer;
     }
     .scrape-btn:hover { background: #b8904e; }
+    .secondary-btn {
+      background: transparent;
+      color: var(--cream);
+      border: 1px solid rgba(245,240,232,.45);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: .78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .secondary-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ── Main layout ── */
     main { display: flex; flex: 1; overflow: hidden; }
@@ -130,6 +142,7 @@
     .badge-apt   { background: #d0e4f0; color: #2a5a7a; }
     .badge-gym   { background: #d0eee8; color: #1a5a4a; }
     .badge-hosp  { background: #f0dcd8; color: #7a2a20; }
+    .badge-poi   { background: #eadcf3; color: #5d3b75; }
     .badge-top   { background: var(--gold); color: #3a2800; }
     .card-rating { font-size: .75rem; color: var(--bark); }
     .card-price  { font-size: .72rem; color: var(--teal); font-weight: 600; margin-top: 3px; }
@@ -227,6 +240,44 @@
     .detail-link:hover { text-decoration: underline; }
     .no-units { font-size: .75rem; color: var(--bark); font-style: italic; }
 
+
+    /* Add location modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 14, 8, .45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      width: min(640px, 92vw);
+      max-height: 88vh;
+      overflow-y: auto;
+      background: var(--cream);
+      border-radius: 12px;
+      border: 1px solid #d4c8b4;
+      padding: 16px;
+      box-shadow: 0 15px 40px rgba(0,0,0,.2);
+    }
+    .modal-title { font-family: 'DM Serif Display', serif; font-size: 1.2rem; margin-bottom: 10px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .field label { display:block; font-size:.72rem; color:var(--bark); margin-bottom:3px; }
+    .field input, .field select, .field textarea { width:100%; border:1px solid #ccbca3; background:#fff; border-radius:8px; padding:7px 8px; font-size:.82rem; }
+    .field textarea { min-height:70px; resize: vertical; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top: 12px; }
+    .primary-btn { background: var(--bark); color: var(--cream); border: none; border-radius: 8px; padding: 8px 14px; font-weight:600; cursor:pointer; }
+    .ghost-btn { background: transparent; color: var(--bark); border: 1px solid #c8b89d; border-radius: 8px; padding: 8px 14px; cursor:pointer; }
+    .form-note { font-size:.72rem; color: var(--bark); margin-top: 8px; }
+    .inline-row { display:flex; gap:8px; align-items:flex-end; }
+    .inline-row .field { flex:1; }
+    .tiny-btn { background:#fff; border:1px solid #c8b89d; border-radius:8px; padding:7px 10px; font-size:.75rem; cursor:pointer; }
+    .tiny-btn:hover { border-color: var(--bark); color: var(--bark); }
+    .hidden { display: none; }
+
     /* Changes bar */
     #changes-bar {
       background: #fff8ec;
@@ -251,6 +302,7 @@
 <header>
   <h1>🌴 Palm Beach Hunt</h1>
   <div class="header-sub" id="header-status">Loading…</div>
+  <button class="secondary-btn" onclick="openAddModal()">＋ Add Location</button>
   <button class="scrape-btn" onclick="triggerScrape()">⟳ Refresh Data</button>
 </header>
 
@@ -262,6 +314,7 @@
       <button class="filter-btn" data-type="apartment" onclick="setFilter(this,'apartment')">Apartments</button>
       <button class="filter-btn" data-type="gym" onclick="setFilter(this,'gym')">Gyms</button>
       <button class="filter-btn" data-type="hospital" onclick="setFilter(this,'hospital')">Hospitals</button>
+      <button class="filter-btn" data-type="poi" onclick="setFilter(this,'poi')">POIs</button>
       <button class="filter-btn" data-type="top" onclick="setFilter(this,'top')">Top Picks</button>
       <button class="filter-btn" data-type="available" onclick="setFilter(this,'available')">Available Now</button>
       <div class="price-filter">
@@ -285,6 +338,54 @@
   </div>
 </main>
 
+
+<div id="add-modal" class="modal-overlay" onclick="closeAddModal(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-title">Add Location</div>
+    <form id="add-location-form" onsubmit="submitAddLocation(event)">
+      <div class="form-grid">
+        <div class="field full">
+          <label>Paste URL (Google Maps, apartments.com, property site)</label>
+          <div class="inline-row">
+            <div class="field"><input name="source_url" id="source-url-input" placeholder="https://maps.google.com/... or https://www.apartments.com/..." /></div>
+            <button type="button" class="tiny-btn" onclick="autofillFromUrl()">Auto-fill</button>
+          </div>
+        </div>
+        <div class="field"><label>Name *</label><input required name="name" /></div>
+        <div class="field"><label>Type *</label>
+          <select required name="location_type" onchange="toggleTypeFields()" id="location-type-select">
+            <option value="apartment">Apartment</option>
+            <option value="gym">Gym</option>
+            <option value="hospital">Hospital</option>
+            <option value="poi">Point of Interest</option>
+          </select>
+        </div>
+        <div class="field full"><label>Address *</label><input required name="address" /></div>
+        <div class="field"><label>Latitude *</label><input required type="number" step="any" name="lat" /></div>
+        <div class="field"><label>Longitude *</label><input required type="number" step="any" name="lon" /></div>
+        <div class="field"><label>Website</label><input name="website_url" /></div>
+        <div class="field"><label>Phone</label><input name="phone" /></div>
+        <div class="field full"><label>Notes</label><textarea name="notes"></textarea></div>
+        <div class="field"><label><input type="checkbox" name="is_top_pick" /> Top pick</label></div>
+
+        <div class="field full type-apartment"><label>Apartments.com slug</label><input name="apartments_com_slug" /></div>
+
+        <div class="field type-gym type-hospital"><label>Google Place ID</label><input name="google_place_id" /></div>
+        <div class="field type-gym type-hospital"><label>Hours</label><input name="hours" /></div>
+        <div class="field full type-gym"><label>Equipment highlights (| separated)</label><input name="equipment_highlights_text" placeholder="Power racks | 24/7 access" /></div>
+        <div class="field full type-hospital"><label>Health system</label><input name="health_system" /></div>
+
+        <div class="field full type-poi"><label>POI Category</label><input name="category" placeholder="e.g., grocery, coworking, park" /></div>
+      </div>
+      <div class="form-note">Tip: for quick capture, only name/address/coordinates/type are required.</div>
+      <div class="modal-actions">
+        <button type="button" class="ghost-btn" onclick="closeAddModal()">Cancel</button>
+        <button type="submit" class="primary-btn" id="add-submit-btn">Save location</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 // ── State ───────────────────────────────────────────────────────────────────
 let allLocations = [];
@@ -303,9 +404,9 @@ function initMap() {
 }
 
 // ── Marker colors ───────────────────────────────────────────────────────────
-const TYPE_COLOR = { apartment: '#4a7fa5', gym: '#3a8a7a', hospital: '#c06050' };
-const BADGE_CLASS = { apartment: 'badge-apt', gym: 'badge-gym', hospital: 'badge-hosp' };
-const TYPE_LABEL = { apartment: 'Apartment', gym: 'Gym', hospital: 'Hospital' };
+const TYPE_COLOR = { apartment: '#4a7fa5', gym: '#3a8a7a', hospital: '#c06050', poi: '#8a5ca5' };
+const BADGE_CLASS = { apartment: 'badge-apt', gym: 'badge-gym', hospital: 'badge-hosp', poi: 'badge-poi' };
+const TYPE_LABEL = { apartment: 'Apartment', gym: 'Gym', hospital: 'Hospital', poi: 'POI' };
 
 function makeIcon(loc) {
   const color = TYPE_COLOR[loc.location_type] || '#888';
@@ -558,6 +659,104 @@ function addAnchors() {
     L.marker([a.lat, a.lon], { icon: grayIcon }).addTo(map)
       .bindTooltip(a.name, { permanent: false, direction: 'top', offset: [0, -6] });
   });
+}
+
+
+
+// ── Add location modal ──────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('add-modal').classList.add('open');
+  toggleTypeFields();
+}
+
+function closeAddModal(event) {
+  if (!event || event.target.id === 'add-modal') {
+    document.getElementById('add-modal').classList.remove('open');
+  }
+}
+
+function toggleTypeFields() {
+  const type = document.getElementById('location-type-select').value;
+  document.querySelectorAll('.type-apartment,.type-gym,.type-hospital,.type-poi').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll(`.type-${type}`).forEach(el => el.classList.remove('hidden'));
+}
+
+async function submitAddLocation(event) {
+  event.preventDefault();
+  const form = document.getElementById('add-location-form');
+  const btn = document.getElementById('add-submit-btn');
+  const f = new FormData(form);
+  const payload = {
+    name: String(f.get('name') || '').trim(),
+    address: String(f.get('address') || '').trim(),
+    lat: Number(f.get('lat')),
+    lon: Number(f.get('lon')),
+    location_type: String(f.get('location_type') || ''),
+    website_url: String(f.get('website_url') || '').trim() || null,
+    phone: String(f.get('phone') || '').trim() || null,
+    notes: String(f.get('notes') || '').trim() || null,
+    is_top_pick: f.get('is_top_pick') === 'on',
+    apartments_com_slug: String(f.get('apartments_com_slug') || '').trim() || null,
+    google_place_id: String(f.get('google_place_id') || '').trim() || null,
+    hours: String(f.get('hours') || '').trim() || null,
+    equipment_highlights: String(f.get('equipment_highlights_text') || '').split('|').map(s => s.trim()).filter(Boolean),
+    health_system: String(f.get('health_system') || '').trim() || null,
+    category: String(f.get('category') || '').trim() || null,
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || 'Failed to save location');
+    }
+    form.reset();
+    closeAddModal();
+    await loadLocations();
+    const created = await res.json();
+    if (created?.id) selectLocation(created.id);
+  } catch (e) {
+    alert(`Could not save location: ${e.message || e}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save location';
+  }
+}
+
+async function autofillFromUrl() {
+  const input = document.getElementById('source-url-input');
+  const url = (input.value || '').trim();
+  if (!url) {
+    alert('Paste a URL first.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/locations/enrich-from-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not parse URL');
+
+    const form = document.getElementById('add-location-form');
+    if (data.inferred_type) form.elements['location_type'].value = data.inferred_type;
+    if (data.suggested_name && !form.elements['name'].value.trim()) form.elements['name'].value = data.suggested_name;
+    if (typeof data.lat === 'number') form.elements['lat'].value = data.lat;
+    if (typeof data.lon === 'number') form.elements['lon'].value = data.lon;
+    if (data.website_url) form.elements['website_url'].value = data.website_url;
+    if (data.apartments_com_slug) form.elements['apartments_com_slug'].value = data.apartments_com_slug;
+    if (data.google_place_id) form.elements['google_place_id'].value = data.google_place_id;
+    toggleTypeFields();
+  } catch (e) {
+    alert(`URL auto-fill failed: ${e.message || e}`);
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
