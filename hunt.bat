@@ -17,6 +17,8 @@ if not exist "data\hunt.db" (
 :: If arguments passed, forward them directly
 if not "%~1"=="" (
     python main.py %*
+    if errorlevel 1 echo.& echo [ERROR] Command failed. See above for details.
+    pause
     goto end
 )
 
@@ -34,11 +36,26 @@ echo.
 set /p choice="  Choice [1]: "
 if "%choice%"=="" set choice=1
 
-if "%choice%"=="1" python main.py web
+if "%choice%"=="1" goto web
 if "%choice%"=="2" python main.py scrape
 if "%choice%"=="3" python main.py show --type apartment
 if "%choice%"=="4" python main.py show
 if "%choice%"=="5" python main.py search
 if "%choice%"=="6" python main.py diff
+goto done
+
+:web
+echo   Starting dashboard... opening browser in 3 seconds.
+start "" /b python main.py web
+timeout /t 3 /nobreak >nul
+start "" http://localhost:8000
+echo   Server is running. Close this window to stop it.
+echo   (or press Ctrl+C to stop the server)
+wait
+
+:done
+if errorlevel 1 echo.& echo [ERROR] Command failed. See above for details.
+echo.
+pause
 
 :end
