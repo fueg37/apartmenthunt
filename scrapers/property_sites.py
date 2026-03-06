@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 _ENTRATA_SIGNAL = ["entrata", "ResidentPortal", "entratacdn"]
 _REALPAGE_SIGNAL = ["realpage", "RPM", "caf.realpage"]
 
+# Common floor plan URL paths to try when link-sniffing fails
+# Ordered by prevalence: Greystar uses /floor-plans, Entrata /floorplans, RealPage /apartments
+_COMMON_FP_PATHS = ["/floor-plans", "/floorplans", "/availability", "/apartments", "/homes"]
+
 
 class PropertySiteScraper(BaseScraper):
 
@@ -37,7 +41,7 @@ class PropertySiteScraper(BaseScraper):
         page = await self._new_page()
         try:
             # Try the main site first to detect CMS
-            ok = await self._safe_goto(page, apartment.website_url)
+            ok = await self._safe_goto(page, apartment.website_url, wait_until="networkidle")
             if not ok:
                 logger.error(f"Could not load {apartment.website_url}")
                 return apartment
@@ -49,11 +53,11 @@ class PropertySiteScraper(BaseScraper):
             # Navigate to floor plans / availability page
             fp_url = _find_floor_plans_url(apartment.website_url, html, cms)
             if fp_url and fp_url != apartment.website_url:
-                ok = await self._safe_goto(page, fp_url)
+                ok = await self._safe_goto(page, fp_url, wait_until="networkidle")
                 if ok:
                     html = await page.content()
 
-            # Click expand buttons
+            # Click expand buttons and wait for content to settle
             for selector in [
                 "button:has-text('See All')",
                 "button:has-text('View All')",
@@ -64,7 +68,10 @@ class PropertySiteScraper(BaseScraper):
                     btns = await page.query_selector_all(selector)
                     for btn in btns[:3]:  # max 3 clicks
                         await btn.click()
-                        await self._human_delay()
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=10_000)
+                        except Exception:
+                            await self._human_delay()
                 except Exception:
                     pass
 
@@ -104,13 +111,8 @@ def _find_floor_plans_url(base_url: str, html: str, cms: str) -> str | None:
         text = a.get_text(strip=True).lower()
         if any(k in href or k in text for k in keywords):
             return urljoin(base_url, a["href"])
-    # Entrata: typically /floorplans
-    if cms == "entrata":
-        return urljoin(base_url, "/floorplans")
-    # RealPage: typically /apartments
-    if cms == "realpage":
-        return urljoin(base_url, "/apartments")
-    return None
+    # Fallback: try common paths in order (covers Greystar, Entrata, RealPage, etc.)
+    return urljoin(base_url, _COMMON_FP_PATHS[0])
 
 
 def _extract_units(html: str, cms: str) -> list[Unit]:
