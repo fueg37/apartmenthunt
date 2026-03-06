@@ -8,6 +8,12 @@ python -c "import typer" 2>nul || (
     pip install -r requirements.txt -q
 )
 
+:: Install Playwright browser binaries if needed (required for scraping)
+python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().__enter__(); p.chromium.executable_path; p.__exit__(None,None,None)" 2>nul || (
+    echo Installing Playwright browser ^(one-time download, ~130 MB^)...
+    playwright install chromium
+)
+
 :: Seed DB on first run
 if not exist "data\hunt.db" (
     echo First run -- seeding database...

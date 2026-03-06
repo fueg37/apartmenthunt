@@ -22,7 +22,12 @@ _MAX_CONCURRENT = 2
 
 
 class ScrapeRunner:
+    def __init__(self) -> None:
+        # (name, success, unit_count, error_msg)
+        self._results: list[tuple[str, bool, int, str | None]] = []
+
     async def run_all(self, locations: list[Location]) -> None:
+        self._results = []
         sem = asyncio.Semaphore(_MAX_CONCURRENT)
 
         with Progress(
@@ -41,23 +46,38 @@ class ScrapeRunner:
 
             await asyncio.gather(*(scrape_one(loc) for loc in locations))
 
-        console.print("[bold green]✓[/] Scrape complete.")
+        self._print_summary()
+
+    def _print_summary(self) -> None:
+        ok = [(n, c) for n, s, c, _ in self._results if s]
+        failed = [(n, e) for n, s, c, e in self._results if not s]
+        total_units = sum(c for _, s, c, _ in self._results if s)
+        console.print(
+            f"\n  [bold green]{len(ok)} scraped OK[/]  "
+            f"[bold red]{len(failed)} failed[/]  "
+            f"[cyan]{total_units} units found[/]"
+        )
+        for name, err in failed:
+            console.print(f"  [red]✗[/] {name}: [dim]{err or 'unknown error'}[/]")
 
     async def _scrape_location(self, loc: Location) -> None:
         console.print(f"  → [dim]{loc.name}[/]")
         try:
             if isinstance(loc, Apartment):
-                await self._scrape_apartment(loc)
+                ok, unit_count, err = await self._scrape_apartment(loc)
             elif isinstance(loc, (Gym, Hospital)):
-                await self._scrape_places(loc)
+                ok, unit_count, err = await self._scrape_places(loc)
             else:
                 logger.warning(f"No scraper for type {loc.location_type}")
+                ok, unit_count, err = False, 0, "unsupported location type"
         except Exception as e:
             logger.error(f"Runner error for {loc.name}: {e}")
             async with get_db() as db:
                 await mark_scraped(db, loc.id, success=False, error_msg=str(e))
+            ok, unit_count, err = False, 0, str(e)
+        self._results.append((loc.name, ok, unit_count, err))
 
-    async def _scrape_apartment(self, apartment: Apartment) -> None:
+    async def _scrape_apartment(self, apartment: Apartment) -> tuple[bool, int, str | None]:
         from scrapers.apartments_com import ApartmentsComScraper
         from scrapers.property_sites import PropertySiteScraper
 
@@ -89,16 +109,18 @@ class ScrapeRunner:
                 )
                 # Re-insert to update rating/review_count
                 await insert(db, updated)
+                return True, len(updated.units), None
             else:
                 await mark_scraped(db, apartment.id, success=False, error_msg="No units extracted")
+                return False, 0, "No units extracted"
 
-    async def _scrape_places(self, loc: Location) -> None:
+    async def _scrape_places(self, loc: Location) -> tuple[bool, int, str | None]:
         from scrapers.google_places import GooglePlacesScraper
         try:
             gp = GooglePlacesScraper()
         except ValueError as e:
             console.print(f"  [yellow]⚠ {e} — skipping Google Places scrape[/]")
-            return
+            return False, 0, str(e)
 
         updated = await gp.search_and_update(loc)
 
@@ -109,6 +131,7 @@ class ScrapeRunner:
             )
             await insert(db, updated)
             await mark_scraped(db, loc.id, success=True)
+        return True, 0, None
 
 
 async def _detect_unit_changes(
