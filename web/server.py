@@ -25,6 +25,17 @@ app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static"
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
 
 
+def _format_price_range(prices: list[int | None]) -> str | None:
+    priced_values = [price for price in prices if price is not None]
+    if not priced_values:
+        return None
+
+    lo, hi = min(priced_values), max(priced_values)
+    if lo == hi:
+        return f"${lo:,}/mo"
+    return f"${lo:,} – ${hi:,}/mo"
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -50,13 +61,14 @@ async def api_locations(
             d = _loc_to_dict(loc)
             if isinstance(loc, Apartment):
                 units = await get_latest_units(db, loc.id)
+                unit_price_mins = [u.price_min for u in units]
                 d["units"] = [_unit_to_dict(u) for u in units]
                 d["available_count"] = sum(1 for u in units if u.available)
-                d["price_range"] = loc.price_range_display if units else None
+                d["price_range"] = _format_price_range(unit_price_mins)
                 if available and not any(u.available for u in units):
                     continue
                 if max_price is not None:
-                    prices = [u.price_min for u in units if u.price_min]
+                    prices = [price for price in unit_price_mins if price is not None]
                     if prices and min(prices) > max_price:
                         continue
             result.append(d)
