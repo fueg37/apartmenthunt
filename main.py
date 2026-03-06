@@ -37,7 +37,7 @@ def seed() -> None:
 
 @app.command()
 def show(
-    loc_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type: apartment, gym, hospital"),
+    loc_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type: apartment, gym, hospital, poi"),
     max_price: Optional[int] = typer.Option(None, "--max-price", "-p", help="Max monthly price (apartments only)"),
     available: bool = typer.Option(False, "--available", "-a", help="Only show locations with available units"),
     top_picks: bool = typer.Option(False, "--top-picks", help="Only show top picks"),
@@ -53,7 +53,7 @@ def add(
     address: str = typer.Option(..., "--address", help="Full street address"),
     lat: float = typer.Option(..., "--lat", help="Latitude"),
     lon: float = typer.Option(..., "--lon", help="Longitude"),
-    loc_type: str = typer.Option(..., "--type", "-t", help="Type: apartment, gym, hospital"),
+    loc_type: str = typer.Option(..., "--type", "-t", help="Type: apartment, gym, hospital, poi"),
     website: Optional[str] = typer.Option(None, "--website", help="Website URL"),
     top_pick: bool = typer.Option(False, "--top-pick", help="Mark as a top pick"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Personal notes"),
@@ -62,6 +62,7 @@ def add(
     hours: Optional[str] = typer.Option(None, "--hours", help="Operating hours for gyms/hospitals"),
     equipment_highlight: list[str] = typer.Option([], "--equipment-highlight", help="Gym equipment highlight (repeat flag)"),
     health_system: Optional[str] = typer.Option(None, "--health-system", help="Health system for hospitals"),
+    category: Optional[str] = typer.Option(None, "--category", help="Custom category for points of interest"),
 ) -> None:
     """Manually add a new location to track."""
     from commands.add import run
@@ -79,6 +80,7 @@ def add(
         hours,
         equipment_highlight,
         health_system,
+        category,
     )
 
 

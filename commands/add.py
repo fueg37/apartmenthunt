@@ -11,7 +11,7 @@ from rich.console import Console
 
 from db.connection import get_db
 from db.locations import get_by_name, insert
-from models import Apartment, Gym, Hospital, Location, LocationType
+from models import Apartment, Gym, Hospital, Location, LocationType, PointOfInterest
 
 console = Console()
 
@@ -30,6 +30,7 @@ def run(
     hours: str | None = None,
     equipment_highlights: list[str] | None = None,
     health_system: str | None = None,
+    category: str | None = None,
 ) -> None:
     asyncio.run(
         _add(
@@ -46,6 +47,7 @@ def run(
             hours=hours,
             equipment_highlights=equipment_highlights or [],
             health_system=health_system,
+            category=category,
         )
     )
 
@@ -64,6 +66,7 @@ async def _add(
     hours: str | None,
     equipment_highlights: list[str],
     health_system: str | None,
+    category: str | None,
 ) -> None:
     loc = _build_location(
         name=name,
@@ -79,6 +82,7 @@ async def _add(
         hours=hours,
         equipment_highlights=equipment_highlights,
         health_system=health_system,
+        category=category,
     )
 
     async with get_db() as db:
@@ -180,6 +184,7 @@ def _build_location_from_record(item: dict) -> Location:
         health_system=(
             str(item["health_system"]).strip() if item.get("health_system") is not None else None
         ),
+        category=(str(item["category"]).strip() if item.get("category") is not None else None),
     )
 
 
@@ -197,6 +202,7 @@ def _build_location(
     hours: str | None,
     equipment_highlights: list[str],
     health_system: str | None,
+    category: str | None,
 ) -> Location:
     if not name:
         raise ValueError("name is required")
@@ -207,7 +213,7 @@ def _build_location(
         lt = LocationType(location_type_str.lower())
     except ValueError as exc:
         raise ValueError(
-            f"Unknown type '{location_type_str}'. Use: apartment, gym, hospital"
+            f"Unknown type '{location_type_str}'. Use: apartment, gym, hospital, poi"
         ) from exc
 
     loc_kwargs = dict(
@@ -229,9 +235,11 @@ def _build_location(
             hours=hours,
             equipment_highlights=equipment_highlights,
         )
-    return Hospital(
-        **loc_kwargs,
-        google_place_id=google_place_id,
-        hours=hours,
-        health_system=health_system,
-    )
+    if lt == LocationType.HOSPITAL:
+        return Hospital(
+            **loc_kwargs,
+            google_place_id=google_place_id,
+            hours=hours,
+            health_system=health_system,
+        )
+    return PointOfInterest(**loc_kwargs, category=category)

@@ -12,6 +12,7 @@ class LocationType(str, Enum):
     APARTMENT = "apartment"
     GYM = "gym"
     HOSPITAL = "hospital"
+    POI = "poi"
 
 
 class Unit(BaseModel):
@@ -122,11 +123,17 @@ class Hospital(Location):
     health_system: str | None = None
 
 
+class PointOfInterest(Location):
+    location_type: LocationType = LocationType.POI
+    category: str | None = None
+
+
 # Map location_type → model class for deserialization
 LOCATION_MODELS: dict[LocationType, type[Location]] = {
     LocationType.APARTMENT: Apartment,
     LocationType.GYM: Gym,
     LocationType.HOSPITAL: Hospital,
+    LocationType.POI: PointOfInterest,
 }
 
 
@@ -174,4 +181,6 @@ def _type_extras(lt: LocationType, extra: dict) -> dict:
             "hours": extra.get("hours"),
             "health_system": extra.get("health_system"),
         }
+    if lt == LocationType.POI:
+        return {"category": extra.get("category")}
     return {}

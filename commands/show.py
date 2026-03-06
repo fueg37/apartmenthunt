@@ -39,7 +39,7 @@ async def _show(
         try:
             lt = LocationType(location_type_str.lower())
         except ValueError:
-            console.print(f"[red]Unknown type '{location_type_str}'. Use: apartment, gym, hospital[/]")
+            console.print(f"[red]Unknown type '{location_type_str}'. Use: apartment, gym, hospital, poi[/]")
             raise typer.Exit(1)
 
     async with get_db() as db:
@@ -88,11 +88,13 @@ def _render_table(locations, show_units: bool) -> None:
         LocationType.APARTMENT: "steel_blue1",
         LocationType.GYM: "green3",
         LocationType.HOSPITAL: "salmon1",
+        LocationType.POI: "plum3",
     }
     type_labels = {
         LocationType.APARTMENT: "Apartments",
         LocationType.GYM: "Gyms",
         LocationType.HOSPITAL: "Hospitals",
+        LocationType.POI: "Points of Interest",
     }
 
     for lt, locs in by_type.items():
