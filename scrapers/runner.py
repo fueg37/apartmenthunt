@@ -94,6 +94,14 @@ class ScrapeRunner:
         finally:
             await scraper.close()
 
+        # Fallback: if apartments.com returned nothing, try the property's own site
+        if not updated.units and apartment.apartments_com_slug and apartment.website_url:
+            ps = PropertySiteScraper()
+            try:
+                updated = await ps.scrape(updated)
+            finally:
+                await ps.close()
+
         async with get_db() as db:
             if updated.units:
                 # Load previous units for change detection
