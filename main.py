@@ -36,14 +36,14 @@ def seed() -> None:
 
 @app.command()
 def show(
-    type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type: apartment, gym, hospital"),
+    loc_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type: apartment, gym, hospital"),
     max_price: Optional[int] = typer.Option(None, "--max-price", "-p", help="Max monthly price (apartments only)"),
     available: bool = typer.Option(False, "--available", "-a", help="Only show locations with available units"),
     top_picks: bool = typer.Option(False, "--top-picks", help="Only show top picks"),
 ) -> None:
     """Display tracked locations with optional filters."""
     from commands.show import run
-    run(type, max_price, available, top_picks)
+    run(loc_type, max_price, available, top_picks)
 
 
 @app.command()
@@ -52,14 +52,14 @@ def add(
     address: str = typer.Option(..., "--address", help="Full street address"),
     lat: float = typer.Option(..., "--lat", help="Latitude"),
     lon: float = typer.Option(..., "--lon", help="Longitude"),
-    type: str = typer.Option(..., "--type", "-t", help="Type: apartment, gym, hospital"),
+    loc_type: str = typer.Option(..., "--type", "-t", help="Type: apartment, gym, hospital"),
     website: Optional[str] = typer.Option(None, "--website", help="Website URL"),
     top_pick: bool = typer.Option(False, "--top-pick", help="Mark as a top pick"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Personal notes"),
 ) -> None:
     """Manually add a new location to track."""
     from commands.add import run
-    run(name, address, lat, lon, type, website, top_pick, notes)
+    run(name, address, lat, lon, loc_type, website, top_pick, notes)
 
 
 @app.command()
