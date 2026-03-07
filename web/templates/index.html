@@ -534,8 +534,8 @@
           </select>
         </div>
         <div class="field full"><label>Address *</label><input required name="address" /></div>
-        <div class="field"><label>Latitude *</label><input required type="number" step="any" name="lat" /></div>
-        <div class="field"><label>Longitude *</label><input required type="number" step="any" name="lon" /></div>
+        <div class="field"><label>Latitude</label><input type="number" step="any" name="lat" placeholder="Auto-filled from URL" /></div>
+        <div class="field"><label>Longitude</label><input type="number" step="any" name="lon" placeholder="Auto-filled from URL" /></div>
         <div class="field"><label>Website</label><input name="website_url" /></div>
         <div class="field"><label>Phone</label><input name="phone" /></div>
         <div class="field full"><label>Notes</label><textarea name="notes"></textarea></div>
@@ -550,7 +550,7 @@
 
         <div class="field full type-poi"><label>POI Category</label><input name="category" placeholder="e.g., grocery, coworking, park" /></div>
       </div>
-      <div class="form-note">Tip: for quick capture, only name/address/coordinates/type are required.</div>
+      <div class="form-note">Tip: paste a URL and click Auto-fill — name, address, and coordinates are populated automatically. Floor plans will be scraped immediately after saving.</div>
       <div class="modal-actions">
         <button type="button" class="ghost-btn" onclick="closeAddModal()">Cancel</button>
         <button type="submit" class="primary-btn" id="add-submit-btn">Save location</button>
@@ -943,6 +943,7 @@ async function autofillFromUrl() {
     const form = document.getElementById('add-location-form');
     if (data.inferred_type) form.elements['location_type'].value = data.inferred_type;
     if (data.suggested_name && !form.elements['name'].value.trim()) form.elements['name'].value = data.suggested_name;
+    if (data.suggested_address && !form.elements['address'].value.trim()) form.elements['address'].value = data.suggested_address;
     if (typeof data.lat === 'number') form.elements['lat'].value = data.lat;
     if (typeof data.lon === 'number') form.elements['lon'].value = data.lon;
     if (data.website_url) form.elements['website_url'].value = data.website_url;
