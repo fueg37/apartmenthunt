@@ -76,6 +76,103 @@ def _format_price_range(prices: list[int | None]) -> str | None:
     return f"${lo:,} – ${hi:,}/mo"
 
 
+def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
+    return max(lo, min(hi, value))
+
+
+def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, Any]:
+    """Compute an opinionated decision score and transparent component breakdown."""
+    components: dict[str, float] = {}
+    reasons: list[str] = []
+
+    rating = loc.rating or 0.0
+    rating_component = _clamp((rating / 5.0) * 100.0)
+    components["rating"] = rating_component
+    if loc.rating:
+        reasons.append(f"Rated {loc.rating:.1f}★ by users")
+
+    if loc.last_scraped:
+        age_hours = max((datetime.utcnow() - loc.last_scraped).total_seconds() / 3600.0, 0.0)
+        freshness_component = _clamp(100.0 - (age_hours * 2.5))
+    else:
+        freshness_component = 35.0
+    components["freshness"] = freshness_component
+
+    top_pick_component = 100.0 if loc.is_top_pick else 0.0
+    components["priority_signal"] = top_pick_component
+    if loc.is_top_pick:
+        reasons.append("Marked as a top pick")
+
+    if isinstance(loc, Apartment):
+        unit_list = units or []
+        priced = [u.price_min for u in unit_list if u.price_min is not None]
+        if priced:
+            cheapest = min(priced)
+            target_budget = 3500
+            affordability_component = _clamp(100.0 - ((cheapest - 1800) / (target_budget - 1800)) * 100.0)
+            components["affordability"] = affordability_component
+            reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
+        else:
+            components["affordability"] = 40.0
+            reasons.append("No recent unit pricing detected")
+
+        available_count = sum(1 for u in unit_list if u.available)
+        availability_component = _clamp(available_count * 25.0)
+        components["availability"] = availability_component
+        if available_count:
+            reasons.append(f"{available_count} unit{'s' if available_count != 1 else ''} currently available")
+        else:
+            reasons.append("No units currently flagged available")
+
+        weights = {
+            "affordability": 0.32,
+            "availability": 0.28,
+            "rating": 0.20,
+            "freshness": 0.12,
+            "priority_signal": 0.08,
+        }
+    else:
+        if isinstance(loc, Gym):
+            type_focus = 74.0
+        elif isinstance(loc, Hospital):
+            type_focus = 76.0
+        else:
+            type_focus = 68.0
+        components["type_fit"] = type_focus
+
+        weights = {
+            "type_fit": 0.45,
+            "rating": 0.30,
+            "freshness": 0.18,
+            "priority_signal": 0.07,
+        }
+
+    weighted_score = sum(components[key] * weight for key, weight in weights.items())
+    score = int(round(_clamp(weighted_score)))
+
+    if score >= 80:
+        tier = "strong_fit"
+        summary = "Strong fit right now"
+    elif score >= 65:
+        tier = "promising"
+        summary = "Promising, worth active monitoring"
+    elif score >= 50:
+        tier = "watch"
+        summary = "Watch list candidate"
+    else:
+        tier = "speculative"
+        summary = "Speculative; needs better signals"
+
+    return {
+        "score": score,
+        "tier": tier,
+        "summary": summary,
+        "components": {k: int(round(v)) for k, v in components.items()},
+        "reasons": reasons[:3],
+        "version": "v1",
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -105,12 +202,15 @@ async def api_locations(
                 d["units"] = [_unit_to_dict(u) for u in units]
                 d["available_count"] = sum(1 for u in units if u.available)
                 d["price_range"] = _format_price_range(unit_price_mins)
+                d["decision_insight"] = _decision_insight_for_location(loc, units)
                 if available and not any(u.available for u in units):
                     continue
                 if max_price is not None:
                     prices = [price for price in unit_price_mins if price is not None]
                     if prices and min(prices) > max_price:
                         continue
+            else:
+                d["decision_insight"] = _decision_insight_for_location(loc)
             result.append(d)
 
     return JSONResponse(result)
@@ -174,6 +274,9 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
             units = await get_latest_units(db, loc.id)
             d["units"] = [_unit_to_dict(u) for u in units]
             d["available_count"] = sum(1 for u in units if u.available)
+            d["decision_insight"] = _decision_insight_for_location(loc, units)
+        else:
+            d["decision_insight"] = _decision_insight_for_location(loc)
     return JSONResponse(d)
 
 
