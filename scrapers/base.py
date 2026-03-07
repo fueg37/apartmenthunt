@@ -63,6 +63,11 @@ class BaseScraper(ABC):
         await self._ensure_browser()
         assert self._context is not None
         page = await self._context.new_page()
+        try:
+            from playwright_stealth import stealth_async
+            await stealth_async(page)
+        except ImportError:
+            pass
         return page
 
     async def _human_delay(self) -> None:

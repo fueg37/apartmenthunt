@@ -78,8 +78,7 @@ class ApartmentsComScraper(BaseScraper):
         try:
             ok = await self._safe_goto(page, url, wait_until="networkidle")
             if not ok:
-                logger.error("Could not load apartments.com search page")
-                return results
+                raise RuntimeError("Could not load apartments.com search page — possible bot block")
 
             # Scroll to trigger lazy loading
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
