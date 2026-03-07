@@ -148,6 +148,33 @@
     .card-price  { font-size: .72rem; color: var(--teal); font-weight: 600; margin-top: 3px; }
     .card-avail  { font-size: .68rem; color: var(--bark); }
     .card-top-icon { position: absolute; top: 8px; right: 10px; font-size: 1rem; }
+    .decision-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: .66rem;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 700;
+      letter-spacing: .2px;
+      background: #f3e7cd;
+      color: #5f4417;
+      border: 1px solid #e3ca94;
+    }
+    .decision-chip small { font-weight: 600; opacity: .82; }
+    .detail-score-box {
+      background: #fdf6e8;
+      border: 1px solid #ead5af;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .detail-score-title { font-size: .72rem; color: var(--bark); text-transform: uppercase; letter-spacing: .6px; }
+    .detail-score-line { font-size: .82rem; }
+    .detail-score-reasons { font-size: .75rem; color: var(--bark); margin-top: 1px; }
 
     /* ── Map ── */
     #map { flex: 1; }
@@ -465,6 +492,11 @@ function getFilteredLocations() {
       if (prices.length && Math.min(...prices) > maxPrice) return false;
     }
     return true;
+  }).sort((a, b) => {
+    const as = a.decision_insight?.score ?? -1;
+    const bs = b.decision_insight?.score ?? -1;
+    if (bs !== as) return bs - as;
+    return a.name.localeCompare(b.name);
   });
 }
 
@@ -483,6 +515,10 @@ function renderCards() {
          ${loc.available_count != null ? `<div class="card-avail">${loc.available_count} unit${loc.available_count !== 1 ? 's' : ''} available</div>` : ''}`
       : '';
 
+    const decisionHtml = loc.decision_insight
+      ? `<span class="decision-chip">Score ${loc.decision_insight.score}<small>${loc.decision_insight.summary}</small></span>`
+      : '';
+
     card.innerHTML = `
       ${loc.is_top_pick ? '<div class="card-top-icon">⭐</div>' : ''}
       <div class="card-name">${loc.name}</div>
@@ -490,6 +526,7 @@ function renderCards() {
       <div class="card-meta">
         <span class="badge ${BADGE_CLASS[loc.location_type]}">${TYPE_LABEL[loc.location_type]}</span>
         ${loc.is_top_pick ? '<span class="badge badge-top">TOP PICK</span>' : ''}
+        ${decisionHtml}
         <span class="card-rating">${loc.rating ? '⭐ ' + loc.rating.toFixed(1) : ''}</span>
       </div>
       ${priceHtml}
@@ -529,6 +566,7 @@ function renderDetail(loc) {
   const panel = document.getElementById('detail-inner');
   const units = loc.units || [];
   const scraped = loc.last_scraped ? new Date(loc.last_scraped + 'Z').toLocaleString() : null;
+  const decision = loc.decision_insight;
 
   // Proximity: show nearest of other types
   const proximityHtml = buildProximity(loc);
@@ -553,6 +591,11 @@ function renderDetail(loc) {
   panel.innerHTML = `
     <div class="detail-name">${loc.name}</div>
     <div class="detail-address">${loc.address}</div>
+    ${decision ? `<div class="detail-score-box">
+      <div class="detail-score-title">Decision Score · ${decision.version}</div>
+      <div class="detail-score-line"><strong>${decision.score}</strong>/100 · ${decision.summary}</div>
+      ${decision.reasons?.length ? `<div class="detail-score-reasons">${decision.reasons.join(' · ')}</div>` : ''}
+    </div>` : ''}
     <div class="detail-badges">
       <span class="badge ${BADGE_CLASS[loc.location_type]}">${TYPE_LABEL[loc.location_type]}</span>
       ${loc.is_top_pick ? '<span class="badge badge-top">TOP PICK</span>' : ''}
