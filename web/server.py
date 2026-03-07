@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, Field
@@ -43,6 +45,23 @@ class LocationCreateRequest(BaseModel):
     equipment_highlights: list[str] = Field(default_factory=list)
     health_system: str | None = None
     category: str | None = None
+
+
+class UrlEnrichmentRequest(BaseModel):
+    url: str
+
+
+class UrlEnrichmentResponse(BaseModel):
+    url: str
+    normalized_url: str
+    inferred_type: str
+    suggested_name: str | None = None
+    suggested_address: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    apartments_com_slug: str | None = None
+    website_url: str | None = None
+    google_place_id: str | None = None
 
 
 
@@ -134,6 +153,15 @@ async def api_add_location(payload: LocationCreateRequest) -> JSONResponse:
         raise HTTPException(status_code=500, detail="Location could not be saved")
 
     return JSONResponse(_loc_to_dict(stored), status_code=201)
+
+
+@app.post("/api/locations/enrich-from-url")
+async def api_enrich_from_url(payload: UrlEnrichmentRequest) -> JSONResponse:
+    try:
+        enriched = _enrich_from_url(payload.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(UrlEnrichmentResponse(**enriched).model_dump())
 
 @app.get("/api/locations/{loc_id}")
 async def api_location_detail(loc_id: int) -> JSONResponse:
@@ -250,3 +278,97 @@ def _unit_to_dict(u) -> dict[str, Any]:
         "price_display": u.price_display,
         "size_display": u.size_display,
     }
+
+
+def _enrich_from_url(raw_url: str) -> dict[str, Any]:
+    if not raw_url or not raw_url.strip():
+        raise ValueError("URL is required")
+
+    normalized = raw_url.strip()
+    if not normalized.startswith(("http://", "https://")):
+        normalized = f"https://{normalized}"
+
+    parsed = urlparse(normalized)
+    host = parsed.netloc.lower()
+    path = parsed.path or ""
+
+    inferred_type = _infer_type_from_url(host, path, parsed.query)
+    apartments_slug = _extract_apartments_slug(host, path)
+    google_place_id = _extract_google_place_id(parsed)
+    lat, lon = _extract_lat_lon(parsed)
+    suggested_name = _extract_name_hint(parsed)
+
+    return {
+        "url": raw_url,
+        "normalized_url": normalized,
+        "inferred_type": inferred_type,
+        "suggested_name": suggested_name,
+        "suggested_address": None,
+        "lat": lat,
+        "lon": lon,
+        "apartments_com_slug": apartments_slug,
+        "website_url": normalized,
+        "google_place_id": google_place_id,
+    }
+
+
+def _infer_type_from_url(host: str, path: str, query: str = "") -> str:
+    combined = f"{host}{path}?{query}".lower()
+    if "apartments.com" in host:
+        return "apartment"
+    if any(k in combined for k in ("hospital", "medical-center", "health")):
+        return "hospital"
+    if any(k in combined for k in ("gym", "fitness", "crossfit", "workout")):
+        return "gym"
+    is_google_maps = "maps.google" in host or host.endswith("goo.gl") or ("google." in host and "/maps" in path)
+    if is_google_maps:
+        if any(k in combined for k in ("hospital", "medical", "health")):
+            return "hospital"
+        if any(k in combined for k in ("gym", "fitness", "crossfit")):
+            return "gym"
+        return "poi"
+    return "poi"
+
+
+def _extract_apartments_slug(host: str, path: str) -> str | None:
+    if "apartments.com" not in host:
+        return None
+    slug = path.strip("/").split("/")[0]
+    if slug and slug not in {"", "apartments"}:
+        return slug
+    return None
+
+
+def _extract_google_place_id(parsed) -> str | None:
+    q = parse_qs(parsed.query)
+    for key in ("place_id", "q", "query"):
+        vals = q.get(key)
+        if not vals:
+            continue
+        val = vals[0]
+        match = re.search(r"(ChI[A-Za-z0-9_-]+)", val)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_lat_lon(parsed) -> tuple[float | None, float | None]:
+    text = f"{parsed.path} {parsed.query}"
+    match = re.search(r"@(-?\d+\.\d+),(-?\d+\.\d+)", text)
+    if match:
+        return float(match.group(1)), float(match.group(2))
+    return None, None
+
+
+def _extract_name_hint(parsed) -> str | None:
+    q = parse_qs(parsed.query)
+    for key in ("q", "query"):
+        vals = q.get(key)
+        if vals:
+            candidate = vals[0]
+            if "ChI" in candidate:
+                continue
+            candidate = unquote(candidate).replace("+", " ").strip()
+            if candidate:
+                return candidate
+    return None

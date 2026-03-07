@@ -272,6 +272,10 @@
     .primary-btn { background: var(--bark); color: var(--cream); border: none; border-radius: 8px; padding: 8px 14px; font-weight:600; cursor:pointer; }
     .ghost-btn { background: transparent; color: var(--bark); border: 1px solid #c8b89d; border-radius: 8px; padding: 8px 14px; cursor:pointer; }
     .form-note { font-size:.72rem; color: var(--bark); margin-top: 8px; }
+    .inline-row { display:flex; gap:8px; align-items:flex-end; }
+    .inline-row .field { flex:1; }
+    .tiny-btn { background:#fff; border:1px solid #c8b89d; border-radius:8px; padding:7px 10px; font-size:.75rem; cursor:pointer; }
+    .tiny-btn:hover { border-color: var(--bark); color: var(--bark); }
     .hidden { display: none; }
 
     /* Changes bar */
@@ -340,6 +344,13 @@
     <div class="modal-title">Add Location</div>
     <form id="add-location-form" onsubmit="submitAddLocation(event)">
       <div class="form-grid">
+        <div class="field full">
+          <label>Paste URL (Google Maps, apartments.com, property site)</label>
+          <div class="inline-row">
+            <div class="field"><input name="source_url" id="source-url-input" placeholder="https://maps.google.com/... or https://www.apartments.com/..." /></div>
+            <button type="button" class="tiny-btn" onclick="autofillFromUrl()">Auto-fill</button>
+          </div>
+        </div>
         <div class="field"><label>Name *</label><input required name="name" /></div>
         <div class="field"><label>Type *</label>
           <select required name="location_type" onchange="toggleTypeFields()" id="location-type-select">
@@ -715,6 +726,36 @@ async function submitAddLocation(event) {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save location';
+  }
+}
+
+async function autofillFromUrl() {
+  const input = document.getElementById('source-url-input');
+  const url = (input.value || '').trim();
+  if (!url) {
+    alert('Paste a URL first.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/locations/enrich-from-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not parse URL');
+
+    const form = document.getElementById('add-location-form');
+    if (data.inferred_type) form.elements['location_type'].value = data.inferred_type;
+    if (data.suggested_name && !form.elements['name'].value.trim()) form.elements['name'].value = data.suggested_name;
+    if (typeof data.lat === 'number') form.elements['lat'].value = data.lat;
+    if (typeof data.lon === 'number') form.elements['lon'].value = data.lon;
+    if (data.website_url) form.elements['website_url'].value = data.website_url;
+    if (data.apartments_com_slug) form.elements['apartments_com_slug'].value = data.apartments_com_slug;
+    if (data.google_place_id) form.elements['google_place_id'].value = data.google_place_id;
+    toggleTypeFields();
+  } catch (e) {
+    alert(`URL auto-fill failed: ${e.message || e}`);
   }
 }
 
