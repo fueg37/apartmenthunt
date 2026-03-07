@@ -100,6 +100,7 @@ class ApartmentsComScraper(BaseScraper):
 
         except Exception as e:
             logger.error(f"Search failed: {e}")
+            raise
         finally:
             await page.close()
 
