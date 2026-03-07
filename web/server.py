@@ -123,24 +123,46 @@ async def _run_gym_discovery() -> int:
 
 
 async def _run_apartment_discovery() -> int:
-    """Run apartment discovery across all areas and store in inbox. Returns count added."""
-    from scrapers.apartments_com import ApartmentsComScraper
+    """Run apartment discovery and store in inbox. Tries apartments.com then Craigslist."""
     from config import SEARCH_BBOX, DEFAULT_SEARCH
 
-    scraper = ApartmentsComScraper()
-    added = 0
+    results = []
+
+    # Try apartments.com first
     try:
-        results = await scraper.search(
-            bbox=SEARCH_BBOX,
-            min_price=DEFAULT_SEARCH["min_price"],
-            max_price=DEFAULT_SEARCH["max_price"],
-            min_beds=DEFAULT_SEARCH["min_beds"],
-        )
+        from scrapers.apartments_com import ApartmentsComScraper
+        scraper = ApartmentsComScraper()
+        try:
+            results = await scraper.search(
+                bbox=SEARCH_BBOX,
+                min_price=DEFAULT_SEARCH["min_price"],
+                max_price=DEFAULT_SEARCH["max_price"],
+                min_beds=DEFAULT_SEARCH["min_beds"],
+            )
+        finally:
+            await scraper.close()
     except Exception as e:
-        logger.warning(f"Apartment discovery failed: {e}")
-        return 0
-    finally:
-        await scraper.close()
+        logger.warning(f"Apartment discovery via apartments.com failed ({e}), trying Craigslist")
+
+    # Fall back to Craigslist
+    if not results:
+        try:
+            from scrapers.craigslist import CraigslistScraper
+            cl = CraigslistScraper()
+            try:
+                results = await cl.search(
+                    lat=26.46, lon=-80.07,
+                    min_price=DEFAULT_SEARCH["min_price"],
+                    max_price=DEFAULT_SEARCH["max_price"],
+                    min_beds=DEFAULT_SEARCH["min_beds"],
+                )
+            finally:
+                await cl.close()
+        except Exception as e:
+            logger.warning(f"Apartment discovery via Craigslist also failed: {e}")
+            return 0
+
+    added = 0
 
     async with get_db() as db:
         existing = await list_all(db, location_type=LocationType.APARTMENT)
@@ -514,21 +536,48 @@ async def api_search(
 
 
 async def _api_search_apartments(area: str | None, max_price: int, min_beds: int) -> JSONResponse:
-    from scrapers.apartments_com import ApartmentsComScraper
     from config import SEARCH_BBOX
 
-    scraper = ApartmentsComScraper()
+    results = []
+    last_error: str | None = None
+
+    # 1. Try apartments.com (best data, but often bot-blocked)
     try:
-        results = await scraper.search(
-            bbox=SEARCH_BBOX,
-            min_price=1800,
-            max_price=max_price,
-            min_beds=min_beds,
-        )
+        from scrapers.apartments_com import ApartmentsComScraper
+        scraper = ApartmentsComScraper()
+        try:
+            results = await scraper.search(
+                bbox=SEARCH_BBOX,
+                min_price=1800,
+                max_price=max_price,
+                min_beds=min_beds,
+            )
+        finally:
+            await scraper.close()
     except Exception as e:
-        raise HTTPException(500, f"Search failed: {e}")
-    finally:
-        await scraper.close()
+        last_error = str(e)
+        logger.warning(f"apartments.com search failed ({e}), falling back to Craigslist")
+
+    # 2. Fall back to Craigslist if apartments.com was blocked or empty
+    if not results:
+        try:
+            from scrapers.craigslist import CraigslistScraper
+            cl = CraigslistScraper()
+            try:
+                results = await cl.search(
+                    lat=26.46, lon=-80.07,
+                    min_price=1800,
+                    max_price=max_price,
+                    min_beds=min_beds,
+                )
+            finally:
+                await cl.close()
+        except Exception as e:
+            last_error = str(e)
+            logger.error(f"Craigslist search also failed: {e}")
+
+    if not results and last_error:
+        raise HTTPException(500, f"All apartment sources failed: {last_error}")
 
     # Filter by area if specified
     if area:
