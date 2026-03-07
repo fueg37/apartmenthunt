@@ -62,30 +62,76 @@ class ApartmentsComScraper(BaseScraper):
         min_beds: int = 2,
     ) -> list[Apartment]:
         """Search apartments.com for listings within a bounding box."""
-        # Build search URL with bounding box and filters
-        bb_str = f"{bbox['north']},{bbox['west']},{bbox['south']},{bbox['east']}"
+        # apartments.com bbox order: north,east,south,west
+        bb_str = f"{bbox['north']},{bbox['east']},{bbox['south']},{bbox['west']}"
+        # Use county slug path — more reliable than generic /apartments/ path
         url = (
-            f"{self.BASE}/apartments/"
+            f"{self.BASE}/palm-beach-county-fl/"
             f"?bb={bb_str}"
             f"&min-price={min_price}"
             f"&max-price={max_price}"
             f"&min-beds={min_beds}"
             f"&so=2"  # sort by newest
         )
+        logger.info(f"Apartments.com search URL: {url}")
+
+        # Intercept the internal search API response (JSON — much more reliable than HTML parsing)
+        api_results: list[dict] = []
+
+        async def _handle_response(response):
+            try:
+                url_lower = response.url.lower()
+                if ("searchresults" in url_lower or "search/results" in url_lower or
+                        "listings" in url_lower) and response.status == 200:
+                    ct = response.headers.get("content-type", "")
+                    if "json" in ct:
+                        data = await response.json()
+                        api_results.append(data)
+                        logger.debug(f"Captured API response from {response.url}")
+            except Exception:
+                pass
 
         page = await self._new_page()
+        page.on("response", _handle_response)
+
         results: list[Apartment] = []
         try:
             ok = await self._safe_goto(page, url, wait_until="networkidle")
             if not ok:
                 raise RuntimeError("Could not load apartments.com search page — possible bot block")
 
+            # Check for bot block page
+            title = await page.title()
+            logger.info(f"Page title after navigation: {title!r}")
+            title_lower = title.lower()
+            if any(kw in title_lower for kw in ("access denied", "robot", "captcha", "blocked", "403", "just a moment")):
+                raise RuntimeError(f"Bot detection triggered — page title: {title!r}")
+
+            # Also check if we landed on a meaningful page (not a generic redirect)
+            current_url = page.url
+            logger.info(f"Current URL after navigation: {current_url}")
+
             # Scroll to trigger lazy loading
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
             await self._human_delay()
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await self._human_delay()
 
             html = await page.content()
-            results = await self._parse_search_results(html)
+            logger.debug(f"HTML snippet (first 500 chars): {html[:500]}")
+
+            # Try API-intercepted results first
+            if api_results:
+                logger.info(f"Got {len(api_results)} API response(s), parsing JSON")
+                for payload in api_results:
+                    results.extend(_parse_api_payload(payload))
+
+            if not results:
+                # Fall back to HTML parsing
+                logger.info("No API results intercepted, falling back to HTML parsing")
+                results = await self._parse_search_results(html)
+
+            logger.info(f"Page 1 results: {len(results)} apartments")
 
             # Handle pagination (up to 3 pages)
             for page_num in range(2, 4):
@@ -93,10 +139,16 @@ class ApartmentsComScraper(BaseScraper):
                 next_btn = await page.query_selector(next_sel)
                 if not next_btn:
                     break
+                api_results.clear()
                 await next_btn.click()
                 await self._human_delay()
                 html = await page.content()
-                results.extend(await self._parse_search_results(html))
+                if api_results:
+                    for payload in api_results:
+                        results.extend(_parse_api_payload(payload))
+                else:
+                    results.extend(await self._parse_search_results(html))
+                logger.info(f"Page {page_num} total results: {len(results)}")
 
         except Exception as e:
             logger.error(f"Search failed: {e}")
@@ -111,6 +163,8 @@ class ApartmentsComScraper(BaseScraper):
             if apt.name not in seen:
                 seen.add(apt.name)
                 deduped.append(apt)
+
+        logger.info(f"Search complete: {len(deduped)} unique apartments found")
         return deduped
 
     async def _extract_units(self, page, html: str) -> list[Unit]:
@@ -359,6 +413,55 @@ def _apartment_from_card(card) -> Apartment | None:
         return apt
     except Exception:
         return None
+
+
+def _parse_api_payload(data: dict) -> list[Apartment]:
+    """Parse apartments intercepted from apartments.com internal search API."""
+    results: list[Apartment] = []
+    # Common shapes: {"placards": [...]} or {"apartments": [...]} or top-level list
+    candidates = []
+    if isinstance(data, list):
+        candidates = data
+    elif isinstance(data, dict):
+        for key in ("placards", "apartments", "listings", "results", "items"):
+            if key in data and isinstance(data[key], list):
+                candidates = data[key]
+                break
+        if not candidates:
+            # Try nested: {"data": {"apartments": [...]}}
+            inner = data.get("data", {})
+            if isinstance(inner, dict):
+                for key in ("placards", "apartments", "listings", "results"):
+                    if key in inner and isinstance(inner[key], list):
+                        candidates = inner[key]
+                        break
+
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("propertyName") or item.get("title")
+        if not name:
+            continue
+        address = item.get("address") or item.get("streetAddress") or ""
+        if isinstance(address, dict):
+            address = f"{address.get('streetAddress','')}, {address.get('city','')}, {address.get('state','')}".strip(", ")
+        lat = float(item.get("latitude") or item.get("lat") or 0)
+        lon = float(item.get("longitude") or item.get("lng") or item.get("lon") or 0)
+        url = item.get("url") or item.get("propertyUrl") or item.get("detailUrl")
+        price_min = None
+        for pk in ("minRent", "minPrice", "rentMin", "priceMin", "price"):
+            if item.get(pk):
+                try:
+                    price_min = int(float(item[pk]))
+                    break
+                except (ValueError, TypeError):
+                    pass
+        apt = Apartment(name=name, address=address, lat=lat, lon=lon, website_url=url)
+        if price_min:
+            apt.units = [Unit(floor_plan_name="2BR", bed=2, bath=2.0, price_min=price_min)]
+        results.append(apt)
+
+    return results
 
 
 def _parse_price_range(text: str) -> tuple[int | None, int | None]:
