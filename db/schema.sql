@@ -55,3 +55,17 @@ CREATE TABLE IF NOT EXISTS change_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_change_log_location ON change_log(location_id, changed_at DESC);
+
+CREATE TABLE IF NOT EXISTS discoveries (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT    NOT NULL,
+    address        TEXT,
+    lat            REAL,
+    lon            REAL,
+    location_type  TEXT    NOT NULL,
+    source         TEXT,
+    source_id      TEXT,
+    data_json      TEXT    DEFAULT '{}',
+    discovered_at  TEXT    NOT NULL,
+    status         TEXT    DEFAULT 'pending'
+);

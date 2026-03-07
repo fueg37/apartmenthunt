@@ -105,14 +105,17 @@ def scrape(
 
 @app.command()
 def search(
-    area: Optional[str] = typer.Option(None, "--area", help="Area to focus on: delray, boynton, boca, lake_worth"),
-    max_price: int = typer.Option(3500, "--max-price", "-p", help="Max monthly rent"),
-    min_beds: int = typer.Option(2, "--min-beds", "-b", help="Minimum bedrooms"),
+    location_type: str = typer.Option("apartment", "--type", "-t", help="What to search for: apartment, gym"),
+    area: Optional[str] = typer.Option(None, "--area", help="Area to focus on: delray, boynton, boca, lake_worth (apartments only)"),
+    max_price: int = typer.Option(3500, "--max-price", "-p", help="Max monthly rent (apartments only)"),
+    min_beds: int = typer.Option(2, "--min-beds", "-b", help="Minimum bedrooms (apartments only)"),
     add_new: bool = typer.Option(False, "--add", help="Prompt to add new results to tracking"),
+    gym_query: Optional[str] = typer.Option(None, "--query", "-q", help="Custom gym search query (gyms only)"),
+    min_rating: float = typer.Option(4.0, "--min-rating", help="Minimum rating filter (gyms only)"),
 ) -> None:
-    """Find new apartments via apartments.com search."""
+    """Find new apartments (via apartments.com) or gyms (via Google Places)."""
     from commands.search import run
-    run(area, max_price, min_beds, add_new)
+    run(location_type, area, max_price, min_beds, add_new, gym_query, min_rating)
 
 
 @app.command()

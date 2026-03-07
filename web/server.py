@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,11 +21,200 @@ from db.connection import get_db
 from db.locations import list_all, get_by_id, get_by_name, insert
 from db.units import get_latest_units
 from db.history import get_changes
+import db.discoveries as disc_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
+
+logger = logging.getLogger(__name__)
 
 _HERE = Path(__file__).parent
 
-app = FastAPI(title="Apartment Hunt Dashboard")
+# Gym discovery queries and filter list (shared with CLI)
+_GYM_DISCOVERY_QUERIES = [
+    "powerlifting gym",
+    "barbell gym",
+    "bodybuilding gym",
+    "strength training gym",
+]
+_CHAIN_GYM_NAMES = {
+    "planet fitness", "la fitness", "anytime fitness", "crunch fitness",
+    "crunch", "ymca", "blink fitness",
+    "orange theory", "orangetheory", "f45", "pure barre", "barry's",
+    "crossfit", "hyrox",
+}
+
+
+async def _run_gym_discovery() -> int:
+    """Run gym discovery and store new finds in the discoveries inbox. Returns count added."""
+    from scrapers.google_places import GooglePlacesScraper
+    from config import SEARCH_BBOX, settings
+
+    if not settings.google_places_api_key:
+        logger.warning("Gym discovery skipped: GOOGLE_PLACES_API_KEY not set")
+        return 0
+
+    scraper = GooglePlacesScraper()
+    seen_place_ids: set[str] = set()
+    added = 0
+
+    async with get_db() as db:
+        # Get existing tracked gym place IDs to skip them
+        existing_gyms = await list_all(db, location_type=LocationType.GYM)
+        tracked_place_ids = {
+            loc.google_place_id for loc in existing_gyms
+            if hasattr(loc, "google_place_id") and loc.google_place_id
+        }
+        tracked_names = {loc.name.lower() for loc in existing_gyms}
+
+        for query in _GYM_DISCOVERY_QUERIES:
+            try:
+                gyms = await scraper.search_gyms(query, max_results=10)
+            except Exception as e:
+                logger.warning(f"Gym discovery query '{query}' failed: {e}")
+                continue
+
+            for gym in gyms:
+                place_id = gym.extra.get("google_place_id", "")
+
+                if place_id and place_id in seen_place_ids:
+                    continue
+                if place_id:
+                    seen_place_ids.add(place_id)
+
+                # Skip if outside bounding box
+                if not (SEARCH_BBOX["south"] <= gym.lat <= SEARCH_BBOX["north"] and
+                        SEARCH_BBOX["west"] <= gym.lon <= SEARCH_BBOX["east"]):
+                    continue
+
+                # Skip low-rated
+                if gym.rating is not None and gym.rating < 4.0:
+                    continue
+
+                # Skip chain/cardio gyms
+                name_lower = gym.name.lower()
+                if any(chain in name_lower for chain in _CHAIN_GYM_NAMES):
+                    continue
+
+                # Skip already tracked
+                if place_id in tracked_place_ids or name_lower in tracked_names:
+                    continue
+
+                row_id = await disc_db.insert_discovery(
+                    db,
+                    name=gym.name,
+                    address=gym.address,
+                    lat=gym.lat,
+                    lon=gym.lon,
+                    location_type="gym",
+                    source="google_places",
+                    source_id=place_id or None,
+                    data={
+                        "rating": gym.rating,
+                        "review_count": gym.review_count,
+                        "phone": gym.phone,
+                        "website_url": gym.website_url,
+                        "google_place_id": place_id,
+                        "hours": gym.hours,
+                    },
+                )
+                if row_id:
+                    added += 1
+
+    return added
+
+
+async def _run_apartment_discovery() -> int:
+    """Run apartment discovery across all areas and store in inbox. Returns count added."""
+    from scrapers.apartments_com import ApartmentsComScraper
+    from config import SEARCH_BBOX, DEFAULT_SEARCH
+
+    scraper = ApartmentsComScraper()
+    added = 0
+    try:
+        results = await scraper.search(
+            bbox=SEARCH_BBOX,
+            min_price=DEFAULT_SEARCH["min_price"],
+            max_price=DEFAULT_SEARCH["max_price"],
+            min_beds=DEFAULT_SEARCH["min_beds"],
+        )
+    except Exception as e:
+        logger.warning(f"Apartment discovery failed: {e}")
+        return 0
+    finally:
+        await scraper.close()
+
+    async with get_db() as db:
+        existing = await list_all(db, location_type=LocationType.APARTMENT)
+        tracked_names = {loc.name.lower() for loc in existing}
+        tracked_slugs = {
+            loc.apartments_com_slug for loc in existing
+            if hasattr(loc, "apartments_com_slug") and loc.apartments_com_slug
+        }
+
+        for apt in results:
+            slug = apt.apartments_com_slug
+            if apt.name.lower() in tracked_names:
+                continue
+            if slug and slug in tracked_slugs:
+                continue
+
+            row_id = await disc_db.insert_discovery(
+                db,
+                name=apt.name,
+                address=apt.address,
+                lat=apt.lat,
+                lon=apt.lon,
+                location_type="apartment",
+                source="apartments_com",
+                source_id=slug,
+                data={
+                    "rating": apt.rating,
+                    "review_count": apt.review_count,
+                    "website_url": apt.website_url,
+                    "apartments_com_slug": slug,
+                },
+            )
+            if row_id:
+                added += 1
+
+    return added
+
+
+async def _initial_discovery_if_empty() -> None:
+    """Run discovery once on startup if inbox is empty (first run)."""
+    async with get_db() as db:
+        count = await disc_db.pending_count(db)
+    if count == 0:
+        logger.info("Discovery inbox is empty — running initial gym discovery…")
+        n = await _run_gym_discovery()
+        logger.info(f"Initial gym discovery added {n} candidates to inbox")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Start APScheduler for weekly background discovery
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        scheduler = AsyncIOScheduler()
+        # Weekly on Sunday at 3am
+        scheduler.add_job(_run_gym_discovery, "cron", day_of_week="sun", hour=3, minute=0)
+        scheduler.add_job(_run_apartment_discovery, "cron", day_of_week="sun", hour=3, minute=30)
+        scheduler.start()
+        logger.info("Discovery scheduler started (weekly Sundays at 3am)")
+    except ImportError:
+        scheduler = None
+        logger.info("APScheduler not installed — scheduled discovery disabled")
+
+    # Run initial discovery if inbox is empty
+    import asyncio as _asyncio
+    _asyncio.create_task(_initial_discovery_if_empty())
+
+    yield
+
+    if scheduler:
+        scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="Apartment Hunt Dashboard", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
 
@@ -309,11 +500,20 @@ async def api_scrape_trigger() -> JSONResponse:
 
 @app.get("/api/search")
 async def api_search(
+    type: str = Query("apartment"),
     area: str | None = Query(None),
     max_price: int = Query(3500),
     min_beds: int = Query(2),
+    query: str | None = Query(None),
+    min_rating: float = Query(4.0),
 ) -> JSONResponse:
-    """Live search apartments.com and return results (not stored)."""
+    """Live search for new apartments (apartments.com) or gyms (Google Places). Results not stored."""
+    if type == "gym":
+        return await _api_search_gyms(query, min_rating)
+    return await _api_search_apartments(area, max_price, min_beds)
+
+
+async def _api_search_apartments(area: str | None, max_price: int, min_beds: int) -> JSONResponse:
     from scrapers.apartments_com import ApartmentsComScraper
     from config import SEARCH_BBOX
 
@@ -330,7 +530,179 @@ async def api_search(
     finally:
         await scraper.close()
 
-    return JSONResponse([_loc_to_dict(r) for r in results])
+    # Filter by area if specified
+    if area:
+        import math
+        from config import AREA_CENTERS
+        center = AREA_CENTERS.get(area.lower())
+        if center:
+            clat, clon = center
+            R = 6371.0
+
+            def nearby(apt, radius_km=8.0):
+                dlat = math.radians(apt.lat - clat)
+                dlon = math.radians(apt.lon - clon)
+                a = math.sin(dlat/2)**2 + math.cos(math.radians(clat)) * math.cos(math.radians(apt.lat)) * math.sin(dlon/2)**2
+                return R * 2 * math.asin(math.sqrt(a)) <= radius_km
+
+            results = [r for r in results if nearby(r)]
+
+    # Mark which are already tracked
+    async with get_db() as db:
+        existing = await list_all(db, location_type=LocationType.APARTMENT)
+    tracked_names = {loc.name.lower() for loc in existing}
+    tracked_slugs = {
+        loc.apartments_com_slug for loc in existing
+        if hasattr(loc, "apartments_com_slug") and loc.apartments_com_slug
+    }
+
+    out = []
+    for r in results:
+        d = _loc_to_dict(r)
+        slug = getattr(r, "apartments_com_slug", None)
+        d["already_tracked"] = (
+            r.name.lower() in tracked_names or
+            (slug and slug in tracked_slugs)
+        )
+        out.append(d)
+
+    return JSONResponse(out)
+
+
+async def _api_search_gyms(query: str | None, min_rating: float) -> JSONResponse:
+    from scrapers.google_places import GooglePlacesScraper
+    from config import SEARCH_BBOX, settings
+
+    if not settings.google_places_api_key:
+        raise HTTPException(503, "GOOGLE_PLACES_API_KEY not configured")
+
+    queries = [query] if query else _GYM_DISCOVERY_QUERIES
+    scraper = GooglePlacesScraper()
+    seen_ids: set[str] = set()
+    gyms = []
+
+    for q in queries:
+        try:
+            found = await scraper.search_gyms(q, max_results=10)
+        except Exception as e:
+            raise HTTPException(500, f"Gym search failed: {e}")
+        for gym in found:
+            place_id = gym.extra.get("google_place_id", "")
+            if place_id and place_id in seen_ids:
+                continue
+            if place_id:
+                seen_ids.add(place_id)
+            if not (SEARCH_BBOX["south"] <= gym.lat <= SEARCH_BBOX["north"] and
+                    SEARCH_BBOX["west"] <= gym.lon <= SEARCH_BBOX["east"]):
+                continue
+            if gym.rating is not None and gym.rating < min_rating:
+                continue
+            name_lower = gym.name.lower()
+            if any(chain in name_lower for chain in _CHAIN_GYM_NAMES):
+                continue
+            gyms.append(gym)
+
+    async with get_db() as db:
+        existing = await list_all(db, location_type=LocationType.GYM)
+    tracked_place_ids = {
+        loc.google_place_id for loc in existing
+        if hasattr(loc, "google_place_id") and loc.google_place_id
+    }
+    tracked_names = {loc.name.lower() for loc in existing}
+
+    out = []
+    for gym in gyms:
+        d = _loc_to_dict(gym)
+        place_id = gym.extra.get("google_place_id", "")
+        d["already_tracked"] = (
+            gym.name.lower() in tracked_names or
+            (place_id and place_id in tracked_place_ids)
+        )
+        out.append(d)
+
+    return JSONResponse(out)
+
+
+@app.get("/api/inbox")
+async def api_inbox() -> JSONResponse:
+    """Return pending discovered locations (not yet approved or rejected)."""
+    async with get_db() as db:
+        pending = await disc_db.list_pending(db)
+    return JSONResponse(pending)
+
+
+@app.get("/api/inbox/count")
+async def api_inbox_count() -> JSONResponse:
+    """Return count of pending discoveries (for badge display)."""
+    async with get_db() as db:
+        count = await disc_db.pending_count(db)
+    return JSONResponse({"count": count})
+
+
+@app.post("/api/inbox/{discovery_id}/approve")
+async def api_inbox_approve(discovery_id: int) -> JSONResponse:
+    """Approve a discovery — adds it to tracked locations."""
+    from commands.add import _build_location
+
+    async with get_db() as db:
+        item = await disc_db.get_by_id(db, discovery_id)
+        if not item:
+            raise HTTPException(404, "Discovery not found")
+
+        data = item.get("data", {})
+        try:
+            loc = _build_location(
+                name=item["name"],
+                address=item["address"] or "",
+                lat=item["lat"] or 0.0,
+                lon=item["lon"] or 0.0,
+                location_type_str=item["location_type"],
+                website_url=data.get("website_url"),
+                is_top_pick=False,
+                notes=None,
+                apartments_com_slug=data.get("apartments_com_slug"),
+                google_place_id=data.get("google_place_id"),
+                hours=data.get("hours"),
+                equipment_highlights=[],
+                health_system=None,
+                category=None,
+            )
+            loc.rating = data.get("rating")
+            loc.review_count = data.get("review_count")
+            loc.phone = data.get("phone")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+        await insert(db, loc)
+        await disc_db.set_status(db, discovery_id, "approved")
+        stored = await get_by_name(db, loc.name)
+
+    return JSONResponse(_loc_to_dict(stored) if stored else {"status": "added"}, status_code=201)
+
+
+@app.post("/api/inbox/{discovery_id}/reject")
+async def api_inbox_reject(discovery_id: int) -> JSONResponse:
+    """Reject a discovery — removes it from the inbox."""
+    async with get_db() as db:
+        ok = await disc_db.set_status(db, discovery_id, "rejected")
+    if not ok:
+        raise HTTPException(404, "Discovery not found")
+    return JSONResponse({"status": "rejected"})
+
+
+@app.post("/api/discover")
+async def api_trigger_discovery(type: str = Query("gym")) -> JSONResponse:
+    """Manually trigger a background discovery run."""
+    import asyncio as _asyncio
+
+    if type == "gym":
+        _asyncio.create_task(_run_gym_discovery())
+    elif type == "apartment":
+        _asyncio.create_task(_run_apartment_discovery())
+    else:
+        raise HTTPException(400, f"Unknown type '{type}'")
+
+    return JSONResponse({"status": f"{type} discovery started"})
 
 
 def _loc_to_dict(loc) -> dict[str, Any]:

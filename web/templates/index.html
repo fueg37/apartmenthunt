@@ -322,6 +322,104 @@
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--sand); border-radius: 4px; }
+
+    /* ── Discover panel ── */
+    #discover-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 8px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #discover-panel.active { display: flex; }
+    .discover-section-title {
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--bark);
+      margin: 4px 0 6px;
+    }
+    .discover-controls {
+      background: var(--cream);
+      border-radius: var(--radius);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .discover-controls label { font-size: .72rem; color: var(--bark); }
+    .discover-controls input, .discover-controls select {
+      width: 100%;
+      border: 1px solid #ccbca3;
+      border-radius: 6px;
+      padding: 5px 7px;
+      font-size: .78rem;
+      background: #fff;
+    }
+    .discover-search-btn {
+      background: var(--bark);
+      color: var(--cream);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: .75rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 2px;
+    }
+    .discover-search-btn:hover { background: var(--dark); }
+    .discover-search-btn:disabled { opacity: .5; cursor: default; }
+    .discover-results { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
+    .disc-card {
+      background: var(--cream);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      border: 1.5px solid transparent;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .disc-card.tracked { opacity: .55; }
+    .disc-card-name { font-weight: 600; font-size: .84rem; }
+    .disc-card-addr { font-size: .7rem; color: var(--bark); }
+    .disc-card-meta { font-size: .7rem; color: var(--bark); }
+    .disc-card-actions { display: flex; gap: 6px; margin-top: 4px; }
+    .disc-track-btn {
+      background: var(--teal);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 3px 9px;
+      font-size: .7rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .disc-track-btn:hover { background: #2a6a5a; }
+    .disc-track-btn:disabled { opacity: .5; cursor: default; }
+    .disc-reject-btn {
+      background: transparent;
+      color: var(--bark);
+      border: 1px solid #ccbca3;
+      border-radius: 5px;
+      padding: 3px 9px;
+      font-size: .7rem;
+      cursor: pointer;
+    }
+    .disc-reject-btn:hover { border-color: var(--coral); color: var(--coral); }
+    .inbox-empty { font-size: .75rem; color: var(--bark); font-style: italic; text-align: center; padding: 8px; }
+    .filter-badge {
+      display: inline-block;
+      background: var(--coral);
+      color: #fff;
+      font-size: .6rem;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: 1px 5px;
+      margin-left: 3px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -344,6 +442,7 @@
       <button class="filter-btn" data-type="poi" onclick="setFilter(this,'poi')">POIs</button>
       <button class="filter-btn" data-type="top" onclick="setFilter(this,'top')">Top Picks</button>
       <button class="filter-btn" data-type="available" onclick="setFilter(this,'available')">Available Now</button>
+      <button class="filter-btn" id="discover-tab-btn" onclick="toggleDiscoverPanel(this)">Discover <span class="filter-badge" id="inbox-badge" style="display:none">0</span></button>
       <div class="price-filter">
         <label>Max $/mo:</label>
         <input type="number" id="max-price-input" placeholder="3500" min="1000" max="10000" step="100"
@@ -351,6 +450,53 @@
       </div>
     </div>
     <div id="cards-list"></div>
+
+    <!-- Discover panel (hidden until Discover tab clicked) -->
+    <div id="discover-panel">
+
+      <!-- Inbox: pending auto-discovered locations -->
+      <div>
+        <div class="discover-section-title">📥 Inbox <span id="inbox-count-label"></span></div>
+        <div id="inbox-results" class="discover-results">
+          <div class="inbox-empty">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Search: find gyms -->
+      <div>
+        <div class="discover-section-title">🏋️ Find Gyms</div>
+        <div class="discover-controls">
+          <label>Keywords</label>
+          <input type="text" id="gym-query-input" value="powerlifting bodybuilding" />
+          <label>Min rating</label>
+          <input type="number" id="gym-min-rating" value="4.0" min="1" max="5" step="0.1" />
+          <button class="discover-search-btn" onclick="searchGyms()">Search Gyms</button>
+        </div>
+        <div id="gym-results" class="discover-results"></div>
+      </div>
+
+      <!-- Search: find apartments -->
+      <div>
+        <div class="discover-section-title">🏢 Find Apartments</div>
+        <div class="discover-controls">
+          <label>Area</label>
+          <select id="apt-area-select">
+            <option value="">All areas</option>
+            <option value="delray">Delray Beach</option>
+            <option value="boynton">Boynton Beach</option>
+            <option value="boca">Boca Raton</option>
+            <option value="lake_worth">Lake Worth</option>
+          </select>
+          <label>Max price</label>
+          <input type="number" id="apt-max-price" value="3500" min="1000" max="10000" step="100" />
+          <label>Min beds</label>
+          <input type="number" id="apt-min-beds" value="2" min="0" max="5" />
+          <button class="discover-search-btn" onclick="searchApartments()">Search Apartments</button>
+        </div>
+        <div id="apt-results" class="discover-results"></div>
+      </div>
+
+    </div>
   </div>
 
   <!-- Center: map -->
@@ -656,6 +802,12 @@ function driveMins(a, b) {
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 function setFilter(btn, type) {
+  // Close discover panel if open
+  if (discoverOpen) {
+    discoverOpen = false;
+    document.getElementById('discover-panel').classList.remove('active');
+    document.getElementById('cards-list').style.display = '';
+  }
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentFilter = type;
@@ -808,11 +960,222 @@ function areaFromAddress(addr) {
   return parts.length >= 2 ? parts[1].trim() : addr;
 }
 
+// ── Discover panel ───────────────────────────────────────────────────────────
+let discoverOpen = false;
+
+async function toggleDiscoverPanel(btn) {
+  discoverOpen = !discoverOpen;
+  const panel = document.getElementById('discover-panel');
+  const cardsList = document.getElementById('cards-list');
+  const allFilterBtns = document.querySelectorAll('.filter-btn');
+
+  if (discoverOpen) {
+    allFilterBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    cardsList.style.display = 'none';
+    panel.classList.add('active');
+    await loadInbox();
+  } else {
+    btn.classList.remove('active');
+    cardsList.style.display = '';
+    panel.classList.remove('active');
+  }
+}
+
+async function loadInbox() {
+  const container = document.getElementById('inbox-results');
+  container.innerHTML = '<div class="inbox-empty">Loading…</div>';
+  try {
+    const res = await fetch('/api/inbox');
+    const items = await res.json();
+    const countLabel = document.getElementById('inbox-count-label');
+    countLabel.textContent = items.length ? `(${items.length})` : '';
+    if (!items.length) {
+      container.innerHTML = '<div class="inbox-empty">No pending discoveries.</div>';
+      return;
+    }
+    container.innerHTML = '';
+    items.forEach(item => container.appendChild(buildInboxCard(item)));
+  } catch (e) {
+    container.innerHTML = '<div class="inbox-empty">Failed to load inbox.</div>';
+  }
+}
+
+function buildInboxCard(item) {
+  const data = item.data || {};
+  const rating = data.rating ? `⭐ ${data.rating.toFixed(1)}` : '';
+  const typeLabel = item.location_type === 'gym' ? '🏋️' : '🏢';
+  const div = document.createElement('div');
+  div.className = 'disc-card';
+  div.innerHTML = `
+    <div class="disc-card-name">${typeLabel} ${item.name}</div>
+    <div class="disc-card-addr">${item.address || ''}</div>
+    <div class="disc-card-meta">${rating} · via ${item.source || ''}</div>
+    <div class="disc-card-actions">
+      <button class="disc-track-btn" onclick="approveDiscovery(${item.id}, this)">+ Track</button>
+      <button class="disc-reject-btn" onclick="rejectDiscovery(${item.id}, this)">Dismiss</button>
+    </div>`;
+  return div;
+}
+
+async function approveDiscovery(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  try {
+    const res = await fetch(`/api/inbox/${id}/approve`, { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    btn.closest('.disc-card').remove();
+    await loadLocations();
+    await updateInboxBadge();
+  } catch (e) {
+    alert(`Could not add: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '+ Track';
+  }
+}
+
+async function rejectDiscovery(id, btn) {
+  btn.disabled = true;
+  try {
+    await fetch(`/api/inbox/${id}/reject`, { method: 'POST' });
+    btn.closest('.disc-card').remove();
+    await updateInboxBadge();
+  } catch (e) {
+    btn.disabled = false;
+  }
+}
+
+async function updateInboxBadge() {
+  try {
+    const res = await fetch('/api/inbox/count');
+    const { count } = await res.json();
+    const badge = document.getElementById('inbox-badge');
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (_) {}
+}
+
+async function searchGyms() {
+  const query = document.getElementById('gym-query-input').value.trim() || 'powerlifting bodybuilding';
+  const minRating = document.getElementById('gym-min-rating').value || '4.0';
+  const btn = document.querySelector('#discover-panel .discover-search-btn');
+  const container = document.getElementById('gym-results');
+
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  container.innerHTML = '<div class="inbox-empty">Searching Google Places…</div>';
+
+  try {
+    const params = new URLSearchParams({ type: 'gym', query, min_rating: minRating });
+    const res = await fetch(`/api/search?${params}`);
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    const results = await res.json();
+    container.innerHTML = '';
+    if (!results.length) {
+      container.innerHTML = '<div class="inbox-empty">No new gyms found.</div>';
+      return;
+    }
+    results.forEach(gym => container.appendChild(buildDiscoverCard(gym)));
+  } catch (e) {
+    container.innerHTML = `<div class="inbox-empty">Search failed: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search Gyms';
+  }
+}
+
+async function searchApartments() {
+  const area = document.getElementById('apt-area-select').value;
+  const maxPrice = document.getElementById('apt-max-price').value || '3500';
+  const minBeds = document.getElementById('apt-min-beds').value || '2';
+  const btns = document.querySelectorAll('#discover-panel .discover-search-btn');
+  const aptBtn = btns[1];
+  const container = document.getElementById('apt-results');
+
+  aptBtn.disabled = true;
+  aptBtn.textContent = 'Searching…';
+  container.innerHTML = '<div class="inbox-empty">Searching apartments.com…</div>';
+
+  try {
+    const params = new URLSearchParams({ type: 'apartment', max_price: maxPrice, min_beds: minBeds });
+    if (area) params.set('area', area);
+    const res = await fetch(`/api/search?${params}`);
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    const results = await res.json();
+    container.innerHTML = '';
+    if (!results.length) {
+      container.innerHTML = '<div class="inbox-empty">No new apartments found.</div>';
+      return;
+    }
+    results.forEach(apt => container.appendChild(buildDiscoverCard(apt)));
+  } catch (e) {
+    container.innerHTML = `<div class="inbox-empty">Search failed: ${e.message}</div>`;
+  } finally {
+    aptBtn.disabled = false;
+    aptBtn.textContent = 'Search Apartments';
+  }
+}
+
+function buildDiscoverCard(item) {
+  const isTracked = item.already_tracked;
+  const rating = item.rating ? `⭐ ${item.rating.toFixed ? item.rating.toFixed(1) : item.rating}` : '';
+  const div = document.createElement('div');
+  div.className = 'disc-card' + (isTracked ? ' tracked' : '');
+  div.innerHTML = `
+    <div class="disc-card-name">${item.name}</div>
+    <div class="disc-card-addr">${item.address || ''}</div>
+    <div class="disc-card-meta">${rating}</div>
+    <div class="disc-card-actions">
+      ${isTracked
+        ? '<span style="font-size:.7rem;color:var(--bark)">Already tracking</span>'
+        : `<button class="disc-track-btn" onclick="trackDiscoveredItem(this)">+ Track</button>`}
+    </div>`;
+  div._itemData = item;
+  return div;
+}
+
+async function trackDiscoveredItem(btn) {
+  const card = btn.closest('.disc-card');
+  const item = card._itemData;
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  try {
+    const payload = {
+      name: item.name,
+      address: item.address || '',
+      lat: item.lat || 0,
+      lon: item.lon || 0,
+      location_type: item.location_type,
+      website_url: item.website_url || null,
+      apartments_com_slug: item.apartments_com_slug || null,
+      google_place_id: item.google_place_id || null,
+    };
+    const res = await fetch('/api/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    btn.textContent = '✓ Tracked';
+    btn.style.background = '#2a7a4a';
+    await loadLocations();
+  } catch (e) {
+    alert(`Could not add: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '+ Track';
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 initMap();
 addAnchors();
 loadLocations();
 loadChanges();
+updateInboxBadge();
 </script>
 </body>
 </html>
