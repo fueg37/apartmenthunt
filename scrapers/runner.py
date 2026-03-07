@@ -106,6 +106,16 @@ class ScrapeRunner:
             finally:
                 await ps.close()
 
+        # Keep only ≥2BR units — strips studios/1BRs before writing to DB
+        from config import DEFAULT_SEARCH
+        min_beds = DEFAULT_SEARCH.get("min_beds", 2)
+        if updated.units:
+            filtered = [u for u in updated.units if u.bed >= min_beds]
+            dropped = len(updated.units) - len(filtered)
+            if dropped:
+                logger.debug(f"{apartment.name}: dropped {dropped} units with < {min_beds}BR")
+            updated.units = filtered
+
         async with get_db() as db:
             if updated.units:
                 # Load previous units for change detection

@@ -41,10 +41,11 @@ def show(
     max_price: Optional[int] = typer.Option(None, "--max-price", "-p", help="Max monthly price (apartments only)"),
     available: bool = typer.Option(False, "--available", "-a", help="Only show locations with available units"),
     top_picks: bool = typer.Option(False, "--top-picks", help="Only show top picks"),
+    beds: Optional[int] = typer.Option(None, "--beds", "-b", help="Filter apartments to N-bedroom units only"),
 ) -> None:
     """Display tracked locations with optional filters."""
     from commands.show import run
-    run(loc_type, max_price, available, top_picks)
+    run(loc_type, max_price, available, top_picks, beds)
 
 
 @app.command()

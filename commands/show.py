@@ -24,8 +24,9 @@ def run(
     max_price: Optional[int] = None,
     available_only: bool = False,
     top_picks_only: bool = False,
+    beds: Optional[int] = None,
 ) -> None:
-    asyncio.run(_show(location_type, max_price, available_only, top_picks_only))
+    asyncio.run(_show(location_type, max_price, available_only, top_picks_only, beds))
 
 
 async def _show(
@@ -33,6 +34,7 @@ async def _show(
     max_price: int | None,
     available_only: bool,
     top_picks_only: bool,
+    beds: int | None,
 ) -> None:
     lt = None
     if location_type_str:
@@ -62,6 +64,12 @@ async def _show(
                     return True  # no data yet, include
                 return any(u.price_min and u.price_min <= max_price for u in loc.units)
             locations = [l for l in locations if passes_price(l)]
+
+        # Apply bedroom filter
+        if beds is not None:
+            for loc in locations:
+                if isinstance(loc, Apartment):
+                    loc.units = [u for u in loc.units if u.bed == beds]
 
         # Apply availability filter
         if available_only:
