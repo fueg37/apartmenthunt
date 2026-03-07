@@ -611,8 +611,9 @@ async def _api_search_apartments(area: str | None, max_price: int, min_beds: int
             last_error = str(e)
             logger.error(f"Craigslist search also failed: {e}")
 
-    if not results and last_error:
-        raise HTTPException(500, f"All apartment sources failed: {last_error}")
+    if not results:
+        msg = last_error or "No listings found from any source"
+        raise HTTPException(500, f"All apartment sources failed: {msg}")
 
     # Filter by area if specified
     if area:
