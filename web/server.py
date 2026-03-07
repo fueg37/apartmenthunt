@@ -122,98 +122,66 @@ async def _run_gym_discovery() -> int:
     return added
 
 
+_APARTMENT_DISCOVERY_QUERIES = [
+    "apartment complex",
+    "luxury apartments",
+    "apartments for rent",
+]
+
+
 async def _run_apartment_discovery() -> int:
-    """Run apartment discovery and store in inbox. Tries apartments.com then Craigslist."""
-    from config import SEARCH_BBOX, DEFAULT_SEARCH
+    """Run apartment discovery via Google Places and store in inbox."""
+    from scrapers.google_places import GooglePlacesScraper
+    from config import SEARCH_BBOX, settings
 
-    results = []
+    if not settings.google_places_api_key:
+        logger.warning("Apartment discovery skipped: GOOGLE_PLACES_API_KEY not set")
+        return 0
 
-    # Try apartments.com first
-    try:
-        from scrapers.apartments_com import ApartmentsComScraper
-        scraper = ApartmentsComScraper()
-        try:
-            results = await scraper.search(
-                bbox=SEARCH_BBOX,
-                min_price=DEFAULT_SEARCH["min_price"],
-                max_price=DEFAULT_SEARCH["max_price"],
-                min_beds=DEFAULT_SEARCH["min_beds"],
-            )
-        finally:
-            await scraper.close()
-    except Exception as e:
-        logger.warning(f"Apartment discovery via apartments.com failed ({e}), trying Realtor.com")
-
-    # Fall back to Realtor.com
-    if not results:
-        try:
-            from scrapers.zillow import ZillowScraper
-            zs = ZillowScraper()
-            try:
-                results = await zs.search(
-                    bbox=SEARCH_BBOX,
-                    min_price=DEFAULT_SEARCH["min_price"],
-                    max_price=DEFAULT_SEARCH["max_price"],
-                    min_beds=DEFAULT_SEARCH["min_beds"],
-                )
-            finally:
-                await zs.close()
-        except Exception as e:
-            logger.warning(f"Apartment discovery via Realtor.com failed ({e}), trying Craigslist")
-
-    # Last resort: Craigslist
-    if not results:
-        try:
-            from scrapers.craigslist import CraigslistScraper
-            cl = CraigslistScraper()
-            try:
-                results = await cl.search(
-                    lat=26.46, lon=-80.07,
-                    min_price=DEFAULT_SEARCH["min_price"],
-                    max_price=DEFAULT_SEARCH["max_price"],
-                    min_beds=DEFAULT_SEARCH["min_beds"],
-                )
-            finally:
-                await cl.close()
-        except Exception as e:
-            logger.warning(f"Apartment discovery via Craigslist also failed: {e}")
-            return 0
-
+    scraper = GooglePlacesScraper()
+    seen_names: set[str] = set()
     added = 0
 
     async with get_db() as db:
         existing = await list_all(db, location_type=LocationType.APARTMENT)
         tracked_names = {loc.name.lower() for loc in existing}
-        tracked_slugs = {
-            loc.apartments_com_slug for loc in existing
-            if hasattr(loc, "apartments_com_slug") and loc.apartments_com_slug
-        }
 
-        for apt in results:
-            slug = apt.apartments_com_slug
-            if apt.name.lower() in tracked_names:
-                continue
-            if slug and slug in tracked_slugs:
+        for query in _APARTMENT_DISCOVERY_QUERIES:
+            try:
+                results = await scraper.search_apartments(query, max_results=10)
+            except Exception as e:
+                logger.warning(f"Apartment discovery query '{query}' failed: {e}")
                 continue
 
-            row_id = await disc_db.insert_discovery(
-                db,
-                name=apt.name,
-                address=apt.address,
-                lat=apt.lat,
-                lon=apt.lon,
-                location_type="apartment",
-                source="apartments_com",
-                source_id=slug,
-                data={
-                    "rating": apt.rating,
-                    "review_count": apt.review_count,
-                    "website_url": apt.website_url,
-                    "apartments_com_slug": slug,
-                },
-            )
-            if row_id:
-                added += 1
+            for apt in results:
+                name_lower = apt.name.lower()
+                if name_lower in seen_names or name_lower in tracked_names:
+                    continue
+
+                # Skip if outside bounding box
+                if not (SEARCH_BBOX["south"] <= apt.lat <= SEARCH_BBOX["north"] and
+                        SEARCH_BBOX["west"] <= apt.lon <= SEARCH_BBOX["east"]):
+                    continue
+
+                seen_names.add(name_lower)
+                row_id = await disc_db.insert_discovery(
+                    db,
+                    name=apt.name,
+                    address=apt.address,
+                    lat=apt.lat,
+                    lon=apt.lon,
+                    location_type="apartment",
+                    source="google_places",
+                    source_id=apt.extra.get("google_place_id") or None,
+                    data={
+                        "rating": apt.rating,
+                        "review_count": apt.review_count,
+                        "phone": apt.phone,
+                        "website_url": apt.website_url,
+                    },
+                )
+                if row_id:
+                    added += 1
 
     return added
 
@@ -261,8 +229,8 @@ templates = Jinja2Templates(directory=str(_HERE / "templates"))
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
-    lat: float
-    lon: float
+    lat: float | None = None
+    lon: float | None = None
     location_type: str
     website_url: str | None = None
     phone: str | None = None
@@ -450,14 +418,15 @@ async def api_locations(
 
 @app.post("/api/locations")
 async def api_add_location(payload: LocationCreateRequest) -> JSONResponse:
+    import asyncio as _asyncio
     from commands.add import _build_location
 
     try:
         loc = _build_location(
             name=payload.name.strip(),
             address=payload.address.strip(),
-            lat=payload.lat,
-            lon=payload.lon,
+            lat=payload.lat or 0.0,
+            lon=payload.lon or 0.0,
             location_type_str=payload.location_type.strip(),
             website_url=(payload.website_url.strip() if payload.website_url else None),
             is_top_pick=payload.is_top_pick,
@@ -482,13 +451,16 @@ async def api_add_location(payload: LocationCreateRequest) -> JSONResponse:
     if not stored:
         raise HTTPException(status_code=500, detail="Location could not be saved")
 
+    if isinstance(stored, Apartment):
+        _asyncio.create_task(_scrape_one_apartment(stored))
+
     return JSONResponse(_loc_to_dict(stored), status_code=201)
 
 
 @app.post("/api/locations/enrich-from-url")
 async def api_enrich_from_url(payload: UrlEnrichmentRequest) -> JSONResponse:
     try:
-        enriched = _enrich_from_url(payload.url)
+        enriched = await _enrich_from_url(payload.url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse(UrlEnrichmentResponse(**enriched).model_dump())
@@ -546,74 +518,32 @@ async def api_search(
     query: str | None = Query(None),
     min_rating: float = Query(4.0),
 ) -> JSONResponse:
-    """Live search for new apartments (apartments.com) or gyms (Google Places). Results not stored."""
+    """Live search for apartments (Google Places) or gyms (Google Places). Results not stored."""
     if type == "gym":
         return await _api_search_gyms(query, min_rating)
-    return await _api_search_apartments(area, max_price, min_beds)
+    return await _api_search_apartments(area, max_price, min_beds, query)
 
 
-async def _api_search_apartments(area: str | None, max_price: int, min_beds: int) -> JSONResponse:
-    from config import SEARCH_BBOX
+async def _api_search_apartments(area: str | None, max_price: int, min_beds: int, query: str | None) -> JSONResponse:
+    from scrapers.google_places import GooglePlacesScraper
+    from config import SEARCH_BBOX, settings
 
-    results = []
-    last_error: str | None = None
+    if not settings.google_places_api_key:
+        raise HTTPException(503, "GOOGLE_PLACES_API_KEY not configured — apartment search requires Google Places API")
 
-    # 1. Try apartments.com (best data, but often bot-blocked)
+    scraper = GooglePlacesScraper()
+    query_text = query or "apartment complex"
     try:
-        from scrapers.apartments_com import ApartmentsComScraper
-        scraper = ApartmentsComScraper()
-        try:
-            results = await scraper.search(
-                bbox=SEARCH_BBOX,
-                min_price=1800,
-                max_price=max_price,
-                min_beds=min_beds,
-            )
-        finally:
-            await scraper.close()
+        results = await scraper.search_apartments(query_text, max_results=20)
     except Exception as e:
-        last_error = str(e)
-        logger.warning(f"apartments.com search failed ({e}), trying Realtor.com")
+        raise HTTPException(500, f"Apartment search failed: {e}")
 
-    # 2. Fall back to Zillow
-    if not results:
-        try:
-            from scrapers.zillow import ZillowScraper
-            zs = ZillowScraper()
-            try:
-                results = await zs.search(
-                    bbox=SEARCH_BBOX,
-                    min_price=1800,
-                    max_price=max_price,
-                    min_beds=min_beds,
-                )
-            finally:
-                await zs.close()
-        except Exception as e:
-            last_error = str(e)
-            logger.warning(f"Realtor.com search failed ({e}), trying Craigslist")
-
-    # 3. Last resort: Craigslist
-    if not results:
-        try:
-            from scrapers.craigslist import CraigslistScraper
-            cl = CraigslistScraper()
-            try:
-                results = await cl.search(
-                    lat=26.46, lon=-80.07,
-                    min_price=1800,
-                    max_price=max_price,
-                    min_beds=min_beds,
-                )
-            finally:
-                await cl.close()
-        except Exception as e:
-            last_error = str(e)
-            logger.error(f"Craigslist search also failed: {e}")
-
-    if not results:
-        msg = last_error or "No listings found from any source"
-        raise HTTPException(500, f"All apartment sources failed: {msg}")
+    # Filter by bounding box
+    results = [
+        r for r in results
+        if SEARCH_BBOX["south"] <= r.lat <= SEARCH_BBOX["north"] and
+           SEARCH_BBOX["west"] <= r.lon <= SEARCH_BBOX["east"]
+    ]
 
     # Filter by area if specified
     if area:
@@ -636,19 +566,11 @@ async def _api_search_apartments(area: str | None, max_price: int, min_beds: int
     async with get_db() as db:
         existing = await list_all(db, location_type=LocationType.APARTMENT)
     tracked_names = {loc.name.lower() for loc in existing}
-    tracked_slugs = {
-        loc.apartments_com_slug for loc in existing
-        if hasattr(loc, "apartments_com_slug") and loc.apartments_com_slug
-    }
 
     out = []
     for r in results:
         d = _loc_to_dict(r)
-        slug = getattr(r, "apartments_com_slug", None)
-        d["already_tracked"] = (
-            r.name.lower() in tracked_names or
-            (slug and slug in tracked_slugs)
-        )
+        d["already_tracked"] = r.name.lower() in tracked_names
         out.append(d)
 
     return JSONResponse(out)
@@ -762,6 +684,10 @@ async def api_inbox_approve(discovery_id: int) -> JSONResponse:
         await disc_db.set_status(db, discovery_id, "approved")
         stored = await get_by_name(db, loc.name)
 
+    if isinstance(loc, Apartment) and stored:
+        import asyncio as _asyncio
+        _asyncio.create_task(_scrape_one_apartment(stored))
+
     return JSONResponse(_loc_to_dict(stored) if stored else {"status": "added"}, status_code=201)
 
 
@@ -840,7 +766,89 @@ def _unit_to_dict(u) -> dict[str, Any]:
     }
 
 
-def _enrich_from_url(raw_url: str) -> dict[str, Any]:
+async def _scrape_one_apartment(loc: Apartment) -> None:
+    """Background task: scrape floor plans for a single apartment."""
+    try:
+        from scrapers.runner import ScrapeRunner
+        runner = ScrapeRunner()
+        await runner._scrape_apartment(loc)
+    except Exception as e:
+        logger.warning(f"Background scrape for '{loc.name}' failed: {e}")
+
+
+def _slug_to_readable(slug: str) -> str:
+    """Convert an apartments.com slug to a readable search query.
+    e.g. 'waterford-bay-boca-raton-fl' -> 'Waterford Bay Boca Raton FL'
+    """
+    return " ".join(w.upper() if len(w) == 2 else w.capitalize() for w in slug.split("-"))
+
+
+async def _geocode_query(query: str) -> tuple[float | None, float | None, str | None]:
+    """Return (lat, lon, formatted_address) by geocoding a query string.
+    Tries Google Places API first (if configured), then falls back to Nominatim (OSM).
+    """
+    import httpx as _httpx
+    from config import settings
+
+    # 1. Google Places Text Search
+    if settings.google_places_api_key:
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": settings.google_places_api_key,
+                "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
+            }
+            body = {
+                "textQuery": query,
+                "pageSize": 1,
+                "locationBias": {
+                    "circle": {
+                        "center": {"latitude": 26.52, "longitude": -80.07},
+                        "radius": 50000.0,
+                    }
+                },
+            }
+            async with _httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    "https://places.googleapis.com/v1/places:searchText",
+                    json=body,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                places = resp.json().get("places", [])
+                if places:
+                    place = places[0]
+                    loc_data = place.get("location", {})
+                    lat = loc_data.get("latitude")
+                    lon = loc_data.get("longitude")
+                    address = place.get("formattedAddress")
+                    if lat and lon:
+                        return float(lat), float(lon), address
+        except Exception as e:
+            logger.debug(f"Google Places geocoding failed for '{query}': {e}")
+
+    # 2. Nominatim fallback (free, no key needed)
+    try:
+        import urllib.parse as _urllib_parse
+        encoded = _urllib_parse.quote(query)
+        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1&countrycodes=us"
+        async with _httpx.AsyncClient(
+            timeout=10.0,
+            headers={"User-Agent": "apartmenthunt/1.0"},
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            results = resp.json()
+            if results:
+                r = results[0]
+                return float(r["lat"]), float(r["lon"]), r.get("display_name")
+    except Exception as e:
+        logger.debug(f"Nominatim geocoding failed for '{query}': {e}")
+
+    return None, None, None
+
+
+async def _enrich_from_url(raw_url: str) -> dict[str, Any]:
     if not raw_url or not raw_url.strip():
         raise ValueError("URL is required")
 
@@ -857,13 +865,42 @@ def _enrich_from_url(raw_url: str) -> dict[str, Any]:
     google_place_id = _extract_google_place_id(parsed)
     lat, lon = _extract_lat_lon(parsed)
     suggested_name = _extract_name_hint(parsed)
+    suggested_address: str | None = None
+
+    # If we don't have coordinates yet, try to geocode
+    if lat is None and lon is None:
+        geocode_query: str | None = None
+        if apartments_slug:
+            geocode_query = _slug_to_readable(apartments_slug)
+        elif suggested_name:
+            geocode_query = suggested_name
+
+        if geocode_query:
+            lat, lon, suggested_address = await _geocode_query(geocode_query)
+
+        # Refine suggested_name from the geocoding query (cleaner than URL hints)
+        if apartments_slug and not suggested_name:
+            # Use only the property name portion of the slug (before city/state)
+            parts = apartments_slug.split("-")
+            # Heuristic: drop trailing 2-letter state code and city words
+            # e.g. "waterford-bay-boca-raton-fl" -> "Waterford Bay"
+            # Keep words until we hit something that looks like a city or state
+            _FL_CITIES = {"boca", "raton", "boynton", "beach", "delray", "lake", "worth",
+                          "palm", "west", "lantana", "greenacres", "wellington"}
+            name_parts = []
+            for p in parts:
+                if len(p) == 2 or p.lower() in _FL_CITIES:
+                    break
+                name_parts.append(p.capitalize())
+            if name_parts:
+                suggested_name = " ".join(name_parts)
 
     return {
         "url": raw_url,
         "normalized_url": normalized,
         "inferred_type": inferred_type,
         "suggested_name": suggested_name,
-        "suggested_address": None,
+        "suggested_address": suggested_address,
         "lat": lat,
         "lon": lon,
         "apartments_com_slug": apartments_slug,

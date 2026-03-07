@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from config import settings
-from models import Gym, Hospital, Location, LocationType
+from models import Apartment, Gym, Hospital, Location, LocationType
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,21 @@ class GooglePlacesScraper:
             self._apply_place_data(gym, place)
             gyms.append(gym)
         return gyms
+
+    async def search_apartments(self, query: str, max_results: int = 10) -> list[Apartment]:
+        """Search for apartment complexes by free-text query."""
+        results = await self._search_text(query, max_results=max_results)
+        apartments: list[Apartment] = []
+        for place in results:
+            apt = Apartment(
+                name=place.get("displayName", {}).get("text", "Unknown"),
+                address=place.get("formattedAddress", ""),
+                lat=place.get("location", {}).get("latitude", 0.0),
+                lon=place.get("location", {}).get("longitude", 0.0),
+            )
+            self._apply_place_data(apt, place)
+            apartments.append(apt)
+        return apartments
 
     async def _search_text(self, query: str, max_results: int = 5) -> list[dict]:
         headers = {
