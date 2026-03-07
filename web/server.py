@@ -142,9 +142,9 @@ async def _run_apartment_discovery() -> int:
         finally:
             await scraper.close()
     except Exception as e:
-        logger.warning(f"Apartment discovery via apartments.com failed ({e}), trying Zillow")
+        logger.warning(f"Apartment discovery via apartments.com failed ({e}), trying Realtor.com")
 
-    # Fall back to Zillow
+    # Fall back to Realtor.com
     if not results:
         try:
             from scrapers.zillow import ZillowScraper
@@ -159,7 +159,7 @@ async def _run_apartment_discovery() -> int:
             finally:
                 await zs.close()
         except Exception as e:
-            logger.warning(f"Apartment discovery via Zillow failed ({e}), trying Craigslist")
+            logger.warning(f"Apartment discovery via Realtor.com failed ({e}), trying Craigslist")
 
     # Last resort: Craigslist
     if not results:
@@ -573,7 +573,7 @@ async def _api_search_apartments(area: str | None, max_price: int, min_beds: int
             await scraper.close()
     except Exception as e:
         last_error = str(e)
-        logger.warning(f"apartments.com search failed ({e}), trying Zillow")
+        logger.warning(f"apartments.com search failed ({e}), trying Realtor.com")
 
     # 2. Fall back to Zillow
     if not results:
@@ -591,7 +591,7 @@ async def _api_search_apartments(area: str | None, max_price: int, min_beds: int
                 await zs.close()
         except Exception as e:
             last_error = str(e)
-            logger.warning(f"Zillow search failed ({e}), trying Craigslist")
+            logger.warning(f"Realtor.com search failed ({e}), trying Craigslist")
 
     # 3. Last resort: Craigslist
     if not results:
