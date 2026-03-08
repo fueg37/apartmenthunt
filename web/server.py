@@ -18,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 
 from db.connection import get_db
-from db.locations import list_all, get_by_id, get_by_name, insert
+from db.locations import list_all, get_by_id, get_by_name, insert, delete_by_id
 from db.units import get_latest_units
 from db.history import get_changes
 import db.discoveries as disc_db
@@ -480,6 +480,15 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
         else:
             d["decision_insight"] = _decision_insight_for_location(loc)
     return JSONResponse(d)
+
+
+@app.delete("/api/locations/{loc_id}")
+async def api_delete_location(loc_id: int) -> JSONResponse:
+    async with get_db() as db:
+        deleted = await delete_by_id(db, loc_id)
+    if not deleted:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"status": "deleted", "id": loc_id})
 
 
 @app.get("/api/changes")

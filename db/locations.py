@@ -73,6 +73,13 @@ async def list_all(
     return [location_from_row(dict(r)) for r in rows]
 
 
+async def delete_by_id(db: aiosqlite.Connection, loc_id: int) -> bool:
+    """Delete a location by id. Returns True if a row was deleted."""
+    cur = await db.execute("DELETE FROM locations WHERE id = ?", (loc_id,))
+    await db.commit()
+    return cur.rowcount > 0
+
+
 async def mark_scraped(
     db: aiosqlite.Connection,
     loc_id: int,
