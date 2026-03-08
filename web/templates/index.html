@@ -759,7 +759,28 @@ function renderDetail(loc) {
     ${loc.website_url ? `<a class="detail-link" href="${loc.website_url}" target="_blank" rel="noopener">↗ Visit website</a>` : ''}
     ${loc.phone ? `<div style="font-size:.75rem;margin-top:6px;color:var(--bark)">📞 ${loc.phone}</div>` : ''}
     ${scraped ? `<div style="font-size:.68rem;margin-top:10px;color:#aaa">Last scraped: ${scraped}</div>` : ''}
+    <button onclick="deleteLocation(${loc.id})"
+      style="margin-top:14px;width:100%;padding:7px;border:1px solid #c8a0a0;background:transparent;border-radius:7px;color:#8a4040;font-size:.75rem;cursor:pointer"
+      onmouseover="this.style.background='#f8e8e8'" onmouseout="this.style.background='transparent'">
+      Remove from tracking
+    </button>
   `;
+}
+
+async function deleteLocation(id) {
+  const loc = allLocations.find(l => l.id === id);
+  const name = loc?.name || 'this location';
+  if (!confirm(`Remove "${name}" from tracking? This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/locations/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    activeId = null;
+    document.getElementById('detail-inner').innerHTML =
+      '<div class="detail-empty">Location removed.</div>';
+    await loadLocations();
+  } catch (e) {
+    alert(`Could not remove: ${e.message}`);
+  }
 }
 
 function buildProximity(loc) {
