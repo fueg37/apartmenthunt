@@ -380,8 +380,11 @@
       display: flex;
       flex-direction: column;
       gap: 3px;
+      cursor: pointer;
     }
+    .disc-card:hover { border-color: #ccbca3; }
     .disc-card.tracked { opacity: .55; }
+    .disc-card.preview-active { border-color: var(--bark); background: #f0e8da; }
     .disc-card-name { font-weight: 600; font-size: .84rem; }
     .disc-card-addr { font-size: .7rem; color: var(--bark); }
     .disc-card-meta { font-size: .7rem; color: var(--bark); }
@@ -1013,9 +1016,22 @@ function buildInboxCard(item) {
     <div class="disc-card-addr">${item.address || ''}</div>
     <div class="disc-card-meta">${rating} · via ${item.source || ''}</div>
     <div class="disc-card-actions">
-      <button class="disc-track-btn" onclick="approveDiscovery(${item.id}, this)">+ Track</button>
-      <button class="disc-reject-btn" onclick="rejectDiscovery(${item.id}, this)">Dismiss</button>
+      <button class="disc-track-btn" onclick="event.stopPropagation();approveDiscovery(${item.id}, this)">+ Track</button>
+      <button class="disc-reject-btn" onclick="event.stopPropagation();rejectDiscovery(${item.id}, this)">Dismiss</button>
     </div>`;
+  div._itemData = {
+    name: item.name,
+    address: item.address,
+    lat: item.lat,
+    lon: item.lon,
+    location_type: item.location_type,
+    rating: data.rating,
+    review_count: data.review_count,
+    website_url: data.website_url,
+    phone: data.phone,
+    _inboxId: item.id,
+  };
+  div.onclick = () => previewDiscoverItem(div);
   return div;
 }
 
@@ -1133,10 +1149,107 @@ function buildDiscoverCard(item) {
     <div class="disc-card-actions">
       ${isTracked
         ? '<span style="font-size:.7rem;color:var(--bark)">Already tracking</span>'
-        : `<button class="disc-track-btn" onclick="trackDiscoveredItem(this)">+ Track</button>`}
+        : `<button class="disc-track-btn" onclick="event.stopPropagation();trackDiscoveredItem(this)">+ Track</button>`}
     </div>`;
   div._itemData = item;
+  div.onclick = () => previewDiscoverItem(div);
   return div;
+}
+
+function previewDiscoverItem(card) {
+  const item = card._itemData;
+  if (!item) return;
+
+  // Deselect any active tracked location
+  activeId = null;
+  document.querySelectorAll('.card.active').forEach(c => c.classList.remove('active'));
+
+  // Highlight this card, deselect others
+  document.querySelectorAll('.disc-card.preview-active').forEach(c => c.classList.remove('preview-active'));
+  card.classList.add('preview-active');
+
+  if (item.lat && item.lon && map) map.panTo([item.lat, item.lon]);
+
+  const proximityHtml = buildProximity(item);
+
+  const trackHtml = item._inboxId != null
+    ? `<button class="disc-track-btn" style="margin-top:10px;padding:6px 14px;font-size:.78rem"
+         onclick="approveDiscoveryFromPreview(${item._inboxId}, this)">+ Track this location</button>`
+    : `<button class="disc-track-btn" style="margin-top:10px;padding:6px 14px;font-size:.78rem"
+         onclick="trackFromPreview(this)">+ Track this location</button>`;
+
+  const panel = document.getElementById('detail-inner');
+  panel.innerHTML = `
+    <div class="detail-name">${item.name}</div>
+    <div class="detail-address">${item.address || ''}</div>
+    <div class="detail-badges" style="margin:6px 0">
+      <span class="badge ${BADGE_CLASS[item.location_type] || ''}">${TYPE_LABEL[item.location_type] || item.location_type}</span>
+      <span style="font-size:.68rem;color:var(--bark);margin-left:6px">Preview — not yet tracked</span>
+    </div>
+    <div class="detail-rating">
+      ${item.rating ? `⭐ <strong>${item.rating.toFixed ? item.rating.toFixed(1) : item.rating}</strong>` : ''}
+      ${item.review_count ? ` · ${Number(item.review_count).toLocaleString()} reviews` : ''}
+    </div>
+    ${proximityHtml}
+    ${item.website_url ? `<a class="detail-link" href="${item.website_url}" target="_blank" rel="noopener">↗ Visit website</a>` : ''}
+    ${item.phone ? `<div style="font-size:.75rem;margin-top:6px;color:var(--bark)">📞 ${item.phone}</div>` : ''}
+    <div style="font-size:.72rem;color:var(--bark);margin-top:10px;font-style:italic">
+      Floor plans available after tracking &amp; scraping.
+    </div>
+    ${trackHtml}
+  `;
+  panel.querySelector('.disc-track-btn')._itemData = item;
+}
+
+async function trackFromPreview(btn) {
+  const item = btn._itemData;
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  try {
+    const payload = {
+      name: item.name,
+      address: item.address || '',
+      lat: item.lat || 0,
+      lon: item.lon || 0,
+      location_type: item.location_type,
+      website_url: item.website_url || null,
+      phone: item.phone || null,
+    };
+    const res = await fetch('/api/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    const created = await res.json().catch(() => null);
+    btn.textContent = '✓ Now tracking';
+    btn.style.background = '#2a7a4a';
+    await loadLocations();
+    if (created?.id) selectLocation(created.id);
+  } catch (e) {
+    alert(`Could not add: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '+ Track this location';
+  }
+}
+
+async function approveDiscoveryFromPreview(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  try {
+    const res = await fetch(`/api/inbox/${id}/approve`, { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    const created = await res.json().catch(() => null);
+    btn.textContent = '✓ Now tracking';
+    btn.style.background = '#2a7a4a';
+    await loadLocations();
+    await loadInbox();
+    if (created?.id) selectLocation(created.id);
+  } catch (e) {
+    alert(`Could not add: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '+ Track this location';
+  }
 }
 
 async function trackDiscoveredItem(btn) {
