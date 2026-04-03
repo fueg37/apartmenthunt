@@ -97,10 +97,11 @@ def add_file(
 @app.command()
 def scrape(
     location: Optional[str] = typer.Option(None, "--location", "-l", help="Scrape only this location (by name)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Bypass TTL and re-scrape regardless of age"),
 ) -> None:
     """Scrape live data for all (or one) tracked locations."""
     from commands.scrape import run
-    run(location)
+    run(location, force=force)
 
 
 @app.command()

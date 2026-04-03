@@ -26,7 +26,7 @@ class ScrapeRunner:
         # (name, success, unit_count, error_msg)
         self._results: list[tuple[str, bool, int, str | None]] = []
 
-    async def run_all(self, locations: list[Location]) -> None:
+    async def run_all(self, locations: list[Location], force: bool = False) -> None:
         self._results = []
         sem = asyncio.Semaphore(_MAX_CONCURRENT)
 
@@ -41,7 +41,7 @@ class ScrapeRunner:
 
             async def scrape_one(loc: Location) -> None:
                 async with sem:
-                    await self._scrape_location(loc)
+                    await self._scrape_location(loc, force=force)
                     progress.advance(task)
 
             await asyncio.gather(*(scrape_one(loc) for loc in locations))
@@ -60,10 +60,15 @@ class ScrapeRunner:
         for name, err in failed:
             console.print(f"  [red]✗[/] {name}: [dim]{err or 'unknown error'}[/]")
 
-    async def _scrape_location(self, loc: Location) -> None:
+    async def _scrape_location(self, loc: Location, force: bool = False) -> None:
         console.print(f"  → [dim]{loc.name}[/]")
         try:
             if isinstance(loc, Apartment):
+                if not force and _within_ttl(loc):
+                    age_h = _age_hours(loc)
+                    console.print(f"  [dim]↷ scraped {age_h:.0f}h ago — skipping (TTL)[/]")
+                    self._results.append((loc.name, True, 0, None))
+                    return
                 ok, unit_count, err = await self._scrape_apartment(loc)
             elif isinstance(loc, (Gym, Hospital)):
                 ok, unit_count, err = await self._scrape_places(loc)
@@ -137,6 +142,21 @@ class ScrapeRunner:
             await insert(db, updated)
             await mark_scraped(db, loc.id, success=True)
         return True, 0, None
+
+
+def _age_hours(loc: Location) -> float:
+    """Hours since loc was last scraped (inf if never)."""
+    if not loc.last_scraped:
+        return float("inf")
+    delta = datetime.utcnow() - loc.last_scraped
+    return delta.total_seconds() / 3600
+
+
+def _within_ttl(loc: Location) -> bool:
+    """True if the location was scraped recently enough to skip."""
+    from config import settings
+    ttl = settings.scrape_apartment_ttl_hours
+    return ttl > 0 and _age_hours(loc) < ttl
 
 
 async def _detect_unit_changes(

@@ -13,11 +13,11 @@ from db.locations import get_by_name, list_all
 console = Console()
 
 
-def run(location_name: Optional[str] = None) -> None:
-    asyncio.run(_scrape(location_name))
+def run(location_name: Optional[str] = None, force: bool = False) -> None:
+    asyncio.run(_scrape(location_name, force=force))
 
 
-async def _scrape(location_name: str | None) -> None:
+async def _scrape(location_name: str | None, force: bool = False) -> None:
     from scrapers.runner import ScrapeRunner
 
     async with get_db() as db:
@@ -35,4 +35,4 @@ async def _scrape(location_name: str | None) -> None:
         return
 
     runner = ScrapeRunner()
-    await runner.run_all(locations)
+    await runner.run_all(locations, force=force)
