@@ -1,4 +1,4 @@
-"""hunt search — find new apartments via apartments.com, or gyms via Google Places."""
+"""hunt search — find new apartments via RentCast API, or gyms via Google Places."""
 from __future__ import annotations
 
 import asyncio
@@ -54,15 +54,19 @@ async def _search_apartments(
     min_beds: int,
     add_new: bool,
 ) -> None:
-    from scrapers.apartments_com import ApartmentsComScraper
-    from config import AREA_CENTERS, SEARCH_BBOX
+    from scrapers.rentcast import RentCastScraper
+    from config import AREA_CENTERS
 
-    console.print(f"[bold]Searching apartments.com[/] (≤${max_price:,}/mo, ≥{min_beds}BR)…")
+    console.print(f"[bold]Searching RentCast[/] (≤${max_price:,}/mo, ≥{min_beds}BR)…")
 
-    scraper = ApartmentsComScraper()
+    try:
+        scraper = RentCastScraper()
+    except ValueError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1)
+
     try:
         results = await scraper.search(
-            bbox=SEARCH_BBOX,
             min_price=1800,
             max_price=max_price,
             min_beds=min_beds,
@@ -70,8 +74,6 @@ async def _search_apartments(
     except Exception as e:
         console.print(f"[red]Search failed:[/] {e}")
         raise typer.Exit(1)
-    finally:
-        await scraper.close()
 
     if not results:
         console.print("[yellow]No results returned.[/]")

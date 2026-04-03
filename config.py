@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     google_places_api_key: str = ""
+    rentcast_api_key: str = ""
     db_path: str = "data/hunt.db"
     scrape_delay_min: float = 1.0
     scrape_delay_max: float = 3.0

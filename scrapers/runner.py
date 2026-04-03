@@ -82,29 +82,14 @@ class ScrapeRunner:
         self._results.append((loc.name, ok, unit_count, err))
 
     async def _scrape_apartment(self, apartment: Apartment) -> tuple[bool, int, str | None]:
-        from scrapers.apartments_com import ApartmentsComScraper
-        from scrapers.property_sites import PropertySiteScraper
-
-        scraper: ApartmentsComScraper | PropertySiteScraper
-
-        # Prefer apartments.com scraper if we have a slug
-        if apartment.apartments_com_slug:
-            scraper = ApartmentsComScraper()
-        else:
-            scraper = PropertySiteScraper()
+        from scrapers.rentcast import RentCastScraper
 
         try:
-            updated = await scraper.scrape(apartment)
-        finally:
-            await scraper.close()
+            scraper = RentCastScraper()
+        except ValueError as e:
+            return False, 0, str(e)
 
-        # Fallback: if apartments.com returned nothing, try the property's own site
-        if not updated.units and apartment.apartments_com_slug and apartment.website_url:
-            ps = PropertySiteScraper()
-            try:
-                updated = await ps.scrape(updated)
-            finally:
-                await ps.close()
+        updated = await scraper.scrape(apartment)
 
         # Keep only ≥2BR units — strips studios/1BRs before writing to DB
         from config import DEFAULT_SEARCH
@@ -133,8 +118,8 @@ class ScrapeRunner:
                 await insert(db, updated)
                 return True, len(updated.units), None
             else:
-                await mark_scraped(db, apartment.id, success=False, error_msg="No units extracted")
-                return False, 0, "No units extracted"
+                await mark_scraped(db, apartment.id, success=False, error_msg="No listings found")
+                return False, 0, "No listings found"
 
     async def _scrape_places(self, loc: Location) -> tuple[bool, int, str | None]:
         from scrapers.google_places import GooglePlacesScraper
