@@ -10,7 +10,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 
 from db.connection import get_db
 from db.locations import mark_scraped, insert
-from db.units import upsert_units, get_latest_units, get_previous_units
+from db.units import upsert_units, get_latest_units, get_previous_units, has_manual_units
 from db.history import log_change
 from models import Apartment, Gym, Hospital, Location, LocationType, PointOfInterest, Unit
 
@@ -69,6 +69,11 @@ class ScrapeRunner:
                     console.print(f"  [dim]↷ scraped {age_h:.0f}h ago — skipping (TTL)[/]")
                     self._results.append((loc.name, True, 0, None))
                     return
+                async with get_db() as db:
+                    if not force and await has_manual_units(db, loc.id):
+                        console.print(f"  [dim]↷ has manual floor plans — skipping[/]")
+                        self._results.append((loc.name, True, 0, None))
+                        return
                 ok, unit_count, err = await self._scrape_apartment(loc)
             elif isinstance(loc, (Gym, Hospital)):
                 ok, unit_count, err = await self._scrape_places(loc)

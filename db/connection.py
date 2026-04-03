@@ -18,6 +18,12 @@ async def _init_db(db: aiosqlite.Connection) -> None:
     schema = _SCHEMA_PATH.read_text()
     await db.executescript(schema)
     await db.commit()
+    # Migration: add is_manual column to units if it doesn't exist yet
+    try:
+        await db.execute("ALTER TABLE units ADD COLUMN is_manual INTEGER DEFAULT 0")
+        await db.commit()
+    except Exception:
+        pass  # Column already exists
 
 
 @asynccontextmanager

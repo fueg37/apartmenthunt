@@ -266,6 +266,20 @@
     }
     .detail-link:hover { text-decoration: underline; }
     .no-units { font-size: .75rem; color: var(--bark); font-style: italic; }
+    .badge-manual { background: #e8f4e8; color: #3a7a3a; font-size: .62rem; padding: 1px 5px; border-radius: 4px; font-weight: 600; vertical-align: middle; margin-left: 4px; }
+    .fp-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr auto; gap: 4px; align-items: center; margin-bottom: 4px; }
+    .fp-row input { border: 1px solid #ccbca3; background: #fff; border-radius: 6px; padding: 5px 6px; font-size: .78rem; width: 100%; }
+    .fp-row-hdr { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr auto; gap: 4px; font-size: .65rem; color: var(--bark); margin-bottom: 2px; }
+    .fp-remove-btn { background: transparent; border: none; color: #c06050; cursor: pointer; font-size: .9rem; padding: 2px 4px; }
+    .fp-section-title { font-size: .72rem; font-weight: 700; color: var(--bark); margin: 10px 0 4px; display: flex; justify-content: space-between; align-items: center; }
+    .fp-manage-btn { font-size: .7rem; background: #fff; border: 1px solid #c8b89d; border-radius: 6px; padding: 3px 8px; cursor: pointer; color: var(--bark); }
+    .fp-manage-btn:hover { border-color: var(--bark); }
+    .fp-editor { margin-top: 8px; padding: 8px; background: #f8f4ec; border: 1px solid #d8c8a8; border-radius: 8px; display: none; }
+    .fp-editor.open { display: block; }
+    .fp-editor-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .fp-save-btn { background: var(--bark); color: var(--cream); border: none; border-radius: 6px; padding: 5px 12px; font-size: .75rem; font-weight: 600; cursor: pointer; }
+    .fp-clear-btn { background: transparent; color: #8a4040; border: 1px solid #c8a0a0; border-radius: 6px; padding: 5px 10px; font-size: .75rem; cursor: pointer; }
+    .fp-clear-btn:hover { background: #f8e8e8; }
 
 
     /* Add location modal */
@@ -546,6 +560,15 @@
 
         <div class="field full type-apartment"><label>Apartments.com slug</label><input name="apartments_com_slug" /></div>
 
+        <div class="field full type-apartment">
+          <div class="fp-section-title">
+            Floor Plans <span style="font-weight:normal;color:#a09080">(optional — providing these skips auto-scrape)</span>
+          </div>
+          <div class="fp-row-hdr"><span>Plan Name</span><span>Beds</span><span>Baths</span><span>Sqft Min</span><span>Sqft Max</span><span>Price Min</span><span>Price Max</span><span></span></div>
+          <div id="add-fp-rows"></div>
+          <button type="button" class="tiny-btn" onclick="addFloorPlanRow('add-fp-rows')" style="margin-top:4px">+ Add Floor Plan</button>
+        </div>
+
         <div class="field type-gym type-hospital"><label>Google Place ID</label><input name="google_place_id" /></div>
         <div class="field type-gym type-hospital"><label>Hours</label><input name="hours" /></div>
         <div class="field full type-gym"><label>Equipment highlights (| separated)</label><input name="equipment_highlights_text" placeholder="Power racks | 24/7 access" /></div>
@@ -553,7 +576,7 @@
 
         <div class="field full type-poi"><label>POI Category</label><input name="category" placeholder="e.g., grocery, coworking, park" /></div>
       </div>
-      <div class="form-note">Tip: paste a URL and click Auto-fill — name, address, and coordinates are populated automatically. Floor plans will be scraped immediately after saving.</div>
+      <div class="form-note">Tip: paste a URL and click Auto-fill — name, address, and coordinates are populated automatically. For apartments, add floor plans manually to skip auto-scraping, or leave empty to scrape automatically.</div>
       <div class="modal-actions">
         <button type="button" class="ghost-btn" onclick="closeAddModal()">Cancel</button>
         <button type="submit" class="primary-btn" id="add-submit-btn">Save location</button>
@@ -723,18 +746,42 @@ function renderDetail(loc) {
   // Units table
   let unitsHtml = '';
   if (loc.location_type === 'apartment') {
+    const hasManual = units.some(u => u.is_manual);
+    const manageBtn = `<button class="fp-manage-btn" onclick="toggleFpEditor(${loc.id})">${hasManual ? '✏ Edit Floor Plans' : '+ Add Floor Plans'}</button>`;
     if (!units.length) {
-      unitsHtml = `<div class="section-title">Floor Plans / Availability</div>
-                   <p class="no-units">No data yet — run <code>hunt scrape</code> to fetch live availability.</p>`;
+      unitsHtml = `<div class="fp-section-title">Floor Plans / Availability ${manageBtn}</div>
+                   <p class="no-units">No data yet — run <code>hunt scrape</code> or add floor plans manually.</p>`;
     } else {
-      unitsHtml = `<div class="section-title">Floor Plans / Availability</div>` +
+      unitsHtml = `<div class="fp-section-title">Floor Plans / Availability ${manageBtn}</div>` +
         units.map(u => `
           <div class="unit-row">
-            <span class="unit-size">${u.size_display}</span>
+            <span class="unit-size">${u.size_display}${u.is_manual ? '<span class="badge-manual">manual</span>' : ''}</span>
             <span class="unit-price">${u.price_display}</span>
             <span class="unit-avail ${u.available ? 'yes' : 'no'}">${u.available ? '● Available' : '○ Unavail.'}</span>
           </div>`).join('');
     }
+    const editorRows = units.filter(u => u.is_manual).map(u =>
+      `<div class="fp-row">
+        <input placeholder="Plan name" value="${escHtml(u.floor_plan_name)}">
+        <input type="number" placeholder="Beds" value="${u.bed ?? ''}">
+        <input type="number" step="0.5" placeholder="Baths" value="${u.bath ?? ''}">
+        <input type="number" placeholder="Sqft min" value="${u.sqft_min ?? ''}">
+        <input type="number" placeholder="Sqft max" value="${u.sqft_max ?? ''}">
+        <input type="number" placeholder="$ min" value="${u.price_min ?? ''}">
+        <input type="number" placeholder="$ max" value="${u.price_max ?? ''}">
+        <button class="fp-remove-btn" type="button" onclick="this.closest('.fp-row').remove()">✕</button>
+      </div>`
+    ).join('');
+    unitsHtml += `
+      <div class="fp-editor" id="fp-editor-${loc.id}">
+        <div class="fp-row-hdr"><span>Plan Name</span><span>Beds</span><span>Baths</span><span>Sqft Min</span><span>Sqft Max</span><span>$ Min</span><span>$ Max</span><span></span></div>
+        <div id="fp-editor-rows-${loc.id}">${editorRows}</div>
+        <button type="button" class="tiny-btn" onclick="addFloorPlanRow('fp-editor-rows-${loc.id}')" style="margin-top:4px">+ Add Row</button>
+        <div class="fp-editor-actions">
+          <button class="fp-save-btn" onclick="saveManualFloorPlans(${loc.id})">Save Floor Plans</button>
+          ${hasManual ? `<button class="fp-clear-btn" onclick="clearManualFloorPlans(${loc.id})">Clear Manual Data</button>` : ''}
+        </div>
+      </div>`;
   }
 
   panel.innerHTML = `
@@ -901,6 +948,7 @@ function addAnchors() {
 // ── Add location modal ──────────────────────────────────────────────────────
 function openAddModal() {
   document.getElementById('add-modal').classList.add('open');
+  document.getElementById('add-fp-rows').innerHTML = '';
   toggleTypeFields();
 }
 
@@ -937,6 +985,7 @@ async function submitAddLocation(event) {
     equipment_highlights: String(f.get('equipment_highlights_text') || '').split('|').map(s => s.trim()).filter(Boolean),
     health_system: String(f.get('health_system') || '').trim() || null,
     category: String(f.get('category') || '').trim() || null,
+    manual_units: collectFloorPlans('add-fp-rows'),
   };
 
   btn.disabled = true;
@@ -952,6 +1001,7 @@ async function submitAddLocation(event) {
       throw new Error(body.detail || 'Failed to save location');
     }
     form.reset();
+    document.getElementById('add-fp-rows').innerHTML = '';
     closeAddModal();
     await loadLocations();
     const created = await res.json();
@@ -992,6 +1042,86 @@ async function autofillFromUrl() {
     toggleTypeFields();
   } catch (e) {
     alert(`URL auto-fill failed: ${e.message || e}`);
+  }
+}
+
+// ── Floor plan helpers ───────────────────────────────────────────────────────
+function addFloorPlanRow(containerId) {
+  const container = document.getElementById(containerId);
+  const row = document.createElement('div');
+  row.className = 'fp-row';
+  row.innerHTML = `
+    <input placeholder="Plan name e.g. 2BD/1BA">
+    <input type="number" placeholder="Beds" min="0">
+    <input type="number" placeholder="Baths" step="0.5" min="0">
+    <input type="number" placeholder="Sqft min" min="0">
+    <input type="number" placeholder="Sqft max" min="0">
+    <input type="number" placeholder="$ min" min="0">
+    <input type="number" placeholder="$ max" min="0">
+    <button class="fp-remove-btn" type="button" onclick="this.closest('.fp-row').remove()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function collectFloorPlans(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return [];
+  const plans = [];
+  for (const row of container.querySelectorAll('.fp-row')) {
+    const inputs = row.querySelectorAll('input');
+    const name = (inputs[0].value || '').trim();
+    const bed = parseInt(inputs[1].value, 10);
+    const bath = parseFloat(inputs[2].value);
+    if (!name || isNaN(bed) || isNaN(bath)) continue;
+    plans.push({
+      floor_plan_name: name,
+      bed,
+      bath,
+      sqft_min: parseInt(inputs[3].value, 10) || null,
+      sqft_max: parseInt(inputs[4].value, 10) || null,
+      price_min: parseInt(inputs[5].value, 10) || null,
+      price_max: parseInt(inputs[6].value, 10) || null,
+    });
+  }
+  return plans;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleFpEditor(locId) {
+  const editor = document.getElementById(`fp-editor-${locId}`);
+  if (editor) editor.classList.toggle('open');
+}
+
+async function saveManualFloorPlans(locId) {
+  const units = collectFloorPlans(`fp-editor-rows-${locId}`);
+  try {
+    const res = await fetch(`/api/locations/${locId}/units/manual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ units }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Save failed');
+    await loadLocations();
+    // Re-select to refresh detail panel
+    const loc = allLocations.find(l => l.id === locId);
+    if (loc) selectLocation(locId);
+  } catch (e) {
+    alert(`Could not save floor plans: ${e.message}`);
+  }
+}
+
+async function clearManualFloorPlans(locId) {
+  if (!confirm('Remove all manually-entered floor plans? This will re-enable auto-scraping for this complex.')) return;
+  try {
+    const res = await fetch(`/api/locations/${locId}/units/manual`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    await loadLocations();
+    selectLocation(locId);
+  } catch (e) {
+    alert(`Could not clear floor plans: ${e.message}`);
   }
 }
 
