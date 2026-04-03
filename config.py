@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     db_path: str = "data/hunt.db"
     scrape_delay_min: float = 1.0
     scrape_delay_max: float = 3.0
+    scrape_apartment_ttl_hours: int = 72  # min hours between RentCast calls per apartment
 
 
 # Search area bounding box: covers Boca Raton → Lake Worth Beach
