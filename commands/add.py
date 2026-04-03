@@ -31,6 +31,7 @@ def run(
     equipment_highlights: list[str] | None = None,
     health_system: str | None = None,
     category: str | None = None,
+    weight: float | None = None,
 ) -> None:
     asyncio.run(
         _add(
@@ -48,6 +49,7 @@ def run(
             equipment_highlights=equipment_highlights or [],
             health_system=health_system,
             category=category,
+            weight=weight,
         )
     )
 
@@ -67,6 +69,7 @@ async def _add(
     equipment_highlights: list[str],
     health_system: str | None,
     category: str | None,
+    weight: float | None = None,
 ) -> None:
     loc = _build_location(
         name=name,
@@ -83,6 +86,7 @@ async def _add(
         equipment_highlights=equipment_highlights,
         health_system=health_system,
         category=category,
+        weight=weight,
     )
 
     async with get_db() as db:
@@ -185,6 +189,7 @@ def _build_location_from_record(item: dict) -> Location:
             str(item["health_system"]).strip() if item.get("health_system") is not None else None
         ),
         category=(str(item["category"]).strip() if item.get("category") is not None else None),
+        weight=(float(item["weight"]) if item.get("weight") is not None else None),
     )
 
 
@@ -203,6 +208,7 @@ def _build_location(
     equipment_highlights: list[str],
     health_system: str | None,
     category: str | None,
+    weight: float | None = None,
 ) -> Location:
     if not name:
         raise ValueError("name is required")
@@ -242,4 +248,4 @@ def _build_location(
             hours=hours,
             health_system=health_system,
         )
-    return PointOfInterest(**loc_kwargs, category=category)
+    return PointOfInterest(**loc_kwargs, category=category, weight=weight)

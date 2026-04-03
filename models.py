@@ -126,6 +126,7 @@ class Hospital(Location):
 class PointOfInterest(Location):
     location_type: LocationType = LocationType.POI
     category: str | None = None
+    weight: float | None = None  # 0.0–1.0 priority; 1.0 = highest (e.g. Whole Foods)
 
 
 # Map location_type → model class for deserialization
@@ -182,5 +183,5 @@ def _type_extras(lt: LocationType, extra: dict) -> dict:
             "health_system": extra.get("health_system"),
         }
     if lt == LocationType.POI:
-        return {"category": extra.get("category")}
+        return {"category": extra.get("category"), "weight": extra.get("weight")}
     return {}

@@ -113,6 +113,9 @@ def _build_extra(loc: Location) -> dict[str, Any]:
         extra["equipment_highlights"] = loc.equipment_highlights
     if isinstance(loc, Hospital) and loc.health_system:
         extra["health_system"] = loc.health_system
-    if isinstance(loc, PointOfInterest) and loc.category:
-        extra["category"] = loc.category
+    if isinstance(loc, PointOfInterest):
+        if loc.category:
+            extra["category"] = loc.category
+        if loc.weight is not None:
+            extra["weight"] = loc.weight
     return extra

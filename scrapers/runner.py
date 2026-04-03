@@ -68,9 +68,7 @@ class ScrapeRunner:
             elif isinstance(loc, (Gym, Hospital)):
                 ok, unit_count, err = await self._scrape_places(loc)
             elif isinstance(loc, PointOfInterest):
-                ok, unit_count, err = True, 0, None
-                async with get_db() as db:
-                    await mark_scraped(db, loc.id, success=True)
+                ok, unit_count, err = await self._scrape_places(loc)
             else:
                 logger.warning(f"No scraper for type {loc.location_type}")
                 ok, unit_count, err = False, 0, "unsupported location type"
