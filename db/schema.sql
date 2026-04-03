@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS units (
     available        INTEGER DEFAULT 1,
     move_in_date     TEXT,
     unit_number      TEXT,
+    is_manual        INTEGER DEFAULT 0,
     scraped_at       TEXT    NOT NULL
 );
 

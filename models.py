@@ -26,6 +26,7 @@ class Unit(BaseModel):
     available: bool = True
     move_in_date: date | None = None
     unit_number: str | None = None
+    is_manual: bool = False
     scraped_at: datetime | None = None
 
     @property

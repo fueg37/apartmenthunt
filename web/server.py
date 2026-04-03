@@ -19,7 +19,7 @@ from fastapi.requests import Request
 
 from db.connection import get_db
 from db.locations import list_all, get_by_id, get_by_name, insert, delete_by_id
-from db.units import get_latest_units
+from db.units import get_latest_units, save_manual_units, delete_manual_units
 from db.history import get_changes
 import db.discoveries as disc_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
@@ -226,6 +226,20 @@ app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static"
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
 
 
+class ManualUnitInput(BaseModel):
+    floor_plan_name: str
+    bed: int
+    bath: float
+    sqft_min: int | None = None
+    sqft_max: int | None = None
+    price_min: int | None = None
+    price_max: int | None = None
+
+
+class ManualUnitsRequest(BaseModel):
+    units: list[ManualUnitInput]
+
+
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
@@ -244,6 +258,7 @@ class LocationCreateRequest(BaseModel):
     health_system: str | None = None
     category: str | None = None
     weight: float | None = None
+    manual_units: list[ManualUnitInput] = Field(default_factory=list)
 
 
 class UrlEnrichmentRequest(BaseModel):
@@ -454,7 +469,24 @@ async def api_add_location(payload: LocationCreateRequest) -> JSONResponse:
         raise HTTPException(status_code=500, detail="Location could not be saved")
 
     if isinstance(stored, Apartment):
-        _asyncio.create_task(_scrape_one_apartment(stored))
+        if payload.manual_units:
+            from models import Unit as _Unit
+            manual = [
+                _Unit(
+                    floor_plan_name=u.floor_plan_name,
+                    bed=u.bed,
+                    bath=u.bath,
+                    sqft_min=u.sqft_min,
+                    sqft_max=u.sqft_max,
+                    price_min=u.price_min,
+                    price_max=u.price_max,
+                )
+                for u in payload.manual_units
+            ]
+            async with get_db() as db:
+                await save_manual_units(db, stored.id, manual)
+        else:
+            _asyncio.create_task(_scrape_one_apartment(stored))
 
     return JSONResponse(_loc_to_dict(stored), status_code=201)
 
@@ -491,6 +523,44 @@ async def api_delete_location(loc_id: int) -> JSONResponse:
     if not deleted:
         raise HTTPException(404, "Location not found")
     return JSONResponse({"status": "deleted", "id": loc_id})
+
+
+@app.post("/api/locations/{loc_id}/units/manual")
+async def api_save_manual_units(loc_id: int, payload: ManualUnitsRequest) -> JSONResponse:
+    """Replace the manual floor plans for an apartment location."""
+    from models import Unit as _Unit
+    async with get_db() as db:
+        loc = await get_by_id(db, loc_id)
+        if not loc:
+            raise HTTPException(404, "Location not found")
+        if not isinstance(loc, Apartment):
+            raise HTTPException(400, "Manual units are only supported for apartment locations")
+        manual = [
+            _Unit(
+                floor_plan_name=u.floor_plan_name,
+                bed=u.bed,
+                bath=u.bath,
+                sqft_min=u.sqft_min,
+                sqft_max=u.sqft_max,
+                price_min=u.price_min,
+                price_max=u.price_max,
+            )
+            for u in payload.units
+        ]
+        await save_manual_units(db, loc_id, manual)
+        units = await get_latest_units(db, loc_id)
+    return JSONResponse([_unit_to_dict(u) for u in units])
+
+
+@app.delete("/api/locations/{loc_id}/units/manual")
+async def api_delete_manual_units(loc_id: int) -> JSONResponse:
+    """Delete all manual floor plans for a location, re-enabling auto-scraping."""
+    async with get_db() as db:
+        loc = await get_by_id(db, loc_id)
+        if not loc:
+            raise HTTPException(404, "Location not found")
+        await delete_manual_units(db, loc_id)
+    return JSONResponse({"status": "manual units cleared", "id": loc_id})
 
 
 @app.get("/api/changes")
@@ -773,6 +843,7 @@ def _unit_to_dict(u) -> dict[str, Any]:
         "available": u.available,
         "move_in_date": u.move_in_date.isoformat() if u.move_in_date else None,
         "unit_number": u.unit_number,
+        "is_manual": u.is_manual,
         "price_display": u.price_display,
         "size_display": u.size_display,
     }
