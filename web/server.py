@@ -243,6 +243,7 @@ class LocationCreateRequest(BaseModel):
     equipment_highlights: list[str] = Field(default_factory=list)
     health_system: str | None = None
     category: str | None = None
+    weight: float | None = None
 
 
 class UrlEnrichmentRequest(BaseModel):
@@ -437,6 +438,7 @@ async def api_add_location(payload: LocationCreateRequest) -> JSONResponse:
             equipment_highlights=[h.strip() for h in payload.equipment_highlights if h.strip()],
             health_system=(payload.health_system.strip() if payload.health_system else None),
             category=(payload.category.strip() if payload.category else None),
+            weight=payload.weight,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -755,6 +757,7 @@ def _loc_to_dict(loc) -> dict[str, Any]:
         data["health_system"] = loc.health_system
     if isinstance(loc, PointOfInterest):
         data["category"] = loc.category
+        data["weight"] = loc.weight
     return data
 
 

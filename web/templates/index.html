@@ -785,26 +785,42 @@ async function deleteLocation(id) {
 
 function buildProximity(loc) {
   const others = allLocations.filter(l => l.id !== loc.id && l.lat && l.lon);
-  // For apartments: show nearest gym + hospital
-  // For gyms/hospitals: show nearest apartments
   let relevant = [];
   if (loc.location_type === 'apartment') {
-    const gyms = others.filter(l => l.location_type === 'gym');
+    const gyms  = others.filter(l => l.location_type === 'gym');
     const hosps = others.filter(l => l.location_type === 'hospital');
+    const pois  = others.filter(l => l.location_type === 'poi');
+    // Groceries: nearest 3 candidates, re-sorted by weight desc (ties broken by proximity), take 2
+    const nearGroceries = nearestN(loc, pois.filter(l => l.category === 'grocery'), 3)
+      .sort((a, b) => {
+        const wa = a.other.weight ?? 0, wb = b.other.weight ?? 0;
+        return wb !== wa ? wb - wa : a.mins - b.mins;
+      }).slice(0, 2);
     relevant = [
       ...nearestN(loc, gyms, 2),
       ...nearestN(loc, hosps, 2),
+      ...nearGroceries,
+      ...nearestN(loc, pois.filter(l => l.category === 'beach'), 1),
+      ...nearestN(loc, pois.filter(l => l.category === 'park'), 1),
+      ...nearestN(loc, pois.filter(l => l.category === 'pharmacy'), 1),
+      ...nearestN(loc, pois.filter(l => l.category === 'general_retail'), 1),
     ];
   } else {
     relevant = nearestN(loc, others.filter(l => l.location_type === 'apartment'), 3);
   }
   if (!relevant.length) return '';
+  const poiIcon = { grocery: '🛒', beach: '🏖️', park: '🌿', pharmacy: '💊', general_retail: '🎯' };
   return `<div class="section-title">Proximity</div>` +
-    relevant.map(({ other, mins }) => `
+    relevant.map(({ other, mins }) => {
+      const icon = other.location_type === 'poi'
+        ? (poiIcon[other.category] ?? '📍')
+        : (other.location_type === 'gym' ? '🏋️' : other.location_type === 'hospital' ? '🏥' : '');
+      return `
       <div class="proximity-item" onclick="selectLocation(${other.id})">
-        <span class="prox-name">${other.name}</span>
+        <span class="prox-name">${icon} ${other.name}</span>
         <span class="prox-time">~${mins} min drive</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 }
 
 function nearestN(from, candidates, n) {
