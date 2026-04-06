@@ -1089,10 +1089,10 @@ async def _geocode_query(query: str) -> tuple[float | None, float | None, str | 
                     lat = loc_data.get("latitude")
                     lon = loc_data.get("longitude")
                     address = place.get("formattedAddress")
-                    if lat and lon:
+                    if lat is not None and lon is not None:
                         return float(lat), float(lon), address
         except Exception as e:
-            logger.debug(f"Google Places geocoding failed for '{query}': {e}")
+            logger.warning(f"Google Places geocoding failed for '{query}': {e}")
 
     # 2. Nominatim fallback (free, no key needed)
     try:
@@ -1101,7 +1101,7 @@ async def _geocode_query(query: str) -> tuple[float | None, float | None, str | 
         url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1&countrycodes=us"
         async with _httpx.AsyncClient(
             timeout=10.0,
-            headers={"User-Agent": "apartmenthunt/1.0"},
+            headers={"User-Agent": "apartmenthunt/1.0 (personal apartment search; https://github.com/fueg37/apartmenthunt)"},
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
@@ -1110,7 +1110,7 @@ async def _geocode_query(query: str) -> tuple[float | None, float | None, str | 
                 r = results[0]
                 return float(r["lat"]), float(r["lon"]), r.get("display_name")
     except Exception as e:
-        logger.debug(f"Nominatim geocoding failed for '{query}': {e}")
+        logger.warning(f"Nominatim geocoding failed for '{query}': {e}")
 
     return None, None, None
 
