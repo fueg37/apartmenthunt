@@ -437,6 +437,123 @@
       margin-left: 3px;
       vertical-align: middle;
     }
+
+    /* ── Verdict ── */
+    .verdict-row { display: flex; gap: 4px; margin-top: 6px; align-items: center; }
+    .verdict-btn {
+      background: #f0ece4; border: 1.5px solid #d4c8b4;
+      border-radius: 6px; padding: 3px 8px; font-size: .82rem;
+      cursor: pointer; transition: border-color .15s, background .15s; line-height: 1.3;
+    }
+    .verdict-btn:hover { border-color: var(--bark); }
+    .verdict-btn.up   { background: #e4f2e4; border-color: #4a8a5a; }
+    .verdict-btn.down { background: #f8e4e0; border-color: #c06050; }
+    .verdict-label { font-size: .65rem; color: var(--bark); }
+
+    /* ── Amenity pills (cards) ── */
+    .amenity-pills { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
+    .amenity-pill {
+      font-size: .6rem; padding: 2px 6px; border-radius: 8px;
+      background: #deeee8; color: #1e5040; font-weight: 600;
+    }
+
+    /* ── Amenities section (detail panel) ── */
+    .amenities-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; margin-top: 4px; }
+    .amenity-item { display: flex; align-items: center; gap: 5px; font-size: .76rem; cursor: pointer; padding: 3px 0; }
+    .amenity-item input[type=checkbox] { cursor: pointer; accent-color: var(--teal); }
+
+    /* ── Amenity filter pills (left panel) ── */
+    .amenity-filter-row { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; margin-top: 4px; }
+    .amenity-filter-pill {
+      font-size: .65rem; padding: 2px 8px; border-radius: 10px;
+      border: 1.5px solid #b8a888; background: transparent;
+      color: var(--dark); cursor: pointer; transition: all .15s;
+    }
+    .amenity-filter-pill.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+    /* ── Pros / Cons ── */
+    .pros-cons-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+    .pros-box { background: #eef7ee; border-radius: 7px; padding: 8px; border-top: 2px solid #4a8a5a; }
+    .cons-box { background: #fdf0ee; border-radius: 7px; padding: 8px; border-top: 2px solid #c06050; }
+    .pc-title { font-size: .65rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; margin-bottom: 5px; }
+    .pc-title.pro { color: #2a5a3a; }
+    .pc-title.con { color: #7a3030; }
+    .pc-item { display: flex; align-items: flex-start; gap: 4px; font-size: .73rem; margin: 2px 0; line-height: 1.4; }
+    .pc-dot { flex-shrink: 0; margin-top: 1px; font-size: .7rem; }
+    .pc-remove { background: none; border: none; color: #c8bea8; cursor: pointer; font-size: .78rem; padding: 0 0 0 2px; flex-shrink: 0; }
+    .pc-remove:hover { color: var(--coral); }
+    .pc-add-row { display: flex; gap: 4px; margin-top: 5px; }
+    .pc-add-input {
+      flex: 1; border: 1px solid #ccbca3; border-radius: 5px;
+      padding: 3px 6px; font-size: .72rem; background: #fff; min-width: 0;
+    }
+    .pc-add-btn {
+      background: transparent; border: 1px solid #ccbca3; color: var(--bark);
+      border-radius: 5px; padding: 3px 7px; font-size: .7rem; cursor: pointer; white-space: nowrap;
+    }
+    .pc-add-btn:hover { border-color: var(--bark); background: var(--sand); }
+
+    /* ── Compare checkbox on cards ── */
+    .compare-check {
+      position: absolute; top: 10px; right: 10px;
+      cursor: pointer; accent-color: var(--blue); width: 14px; height: 14px;
+    }
+
+    /* ── Compare FAB in header ── */
+    .compare-fab {
+      background: var(--blue); color: #fff; border: none;
+      border-radius: 6px; padding: 6px 14px;
+      font-family: 'DM Sans', sans-serif; font-size: .8rem; font-weight: 600; cursor: pointer;
+    }
+    .compare-fab:hover { background: #3a6f95; }
+
+    /* ── Comparison overlay ── */
+    .compare-overlay {
+      position: fixed; inset: 0; background: rgba(20,14,8,.65);
+      display: none; align-items: flex-start; justify-content: center;
+      z-index: 10000; overflow-y: auto; padding: 24px 16px;
+    }
+    .compare-overlay.open { display: flex; }
+    .compare-card {
+      background: var(--cream); border-radius: 12px; border: 1px solid #d4c8b4;
+      width: min(1000px, 96vw); padding: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    }
+    .compare-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; }
+    .compare-title { font-family: 'DM Serif Display', serif; font-size: 1.2rem; }
+    .compare-header-btns { display: flex; gap: 8px; }
+    .compare-close-btn { background: transparent; border: 1px solid #c8b89d; border-radius: 6px; padding: 5px 12px; cursor: pointer; color: var(--bark); font-size: .78rem; }
+    .compare-print-btn { background: var(--bark); color: var(--cream); border: none; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: .78rem; font-weight: 600; }
+    .compare-grid { border: 1px solid #d4c8b4; border-radius: 8px; overflow: hidden; }
+    .compare-row { display: flex; }
+    .compare-row + .compare-row { border-top: 1px solid #e8dcc8; }
+    .compare-label {
+      min-width: 120px; width: 120px; background: var(--sand);
+      padding: 9px 12px; font-size: .67rem; font-weight: 700;
+      color: var(--bark); text-transform: uppercase; letter-spacing: .4px;
+      display: flex; align-items: center; flex-shrink: 0;
+    }
+    .compare-cell {
+      flex: 1; padding: 9px 12px; font-size: .8rem;
+      border-left: 1px solid #e8dcc8;
+      display: flex; align-items: flex-start; flex-direction: column; justify-content: center;
+      gap: 2px; min-width: 0;
+    }
+    .compare-cell.best  { background: #eef7ee; }
+    .compare-cell.worst { background: #fdf2f0; }
+
+    /* ── Commute anchor ── */
+    .commute-row { display: flex; align-items: center; gap: 4px; width: 100%; margin-top: 4px; }
+    .commute-row label { font-size: .7rem; color: var(--bark); white-space: nowrap; }
+    .commute-row input {
+      flex: 1; font-size: .72rem; border: 1px solid var(--bark);
+      border-radius: 6px; padding: 3px 6px; background: var(--cream); min-width: 0;
+    }
+    .commute-row button {
+      font-size: .68rem; background: var(--bark); color: var(--cream);
+      border: none; border-radius: 5px; padding: 4px 7px; cursor: pointer; white-space: nowrap;
+    }
+    .commute-time-badge { font-size: .67rem; color: var(--blue); font-weight: 600; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -445,6 +562,7 @@
   <h1>🌴 Palm Beach Hunt</h1>
   <div class="header-sub" id="header-status">Loading…</div>
   <button class="secondary-btn" onclick="openAddModal()">＋ Add Location</button>
+  <button class="compare-fab" id="compare-fab" onclick="openCompare()" style="display:none">⊞ Compare</button>
   <button class="scrape-btn" onclick="triggerScrape()">⟳ Refresh Data</button>
 </header>
 
@@ -459,11 +577,26 @@
       <button class="filter-btn" data-type="poi" onclick="setFilter(this,'poi')">POIs</button>
       <button class="filter-btn" data-type="top" onclick="setFilter(this,'top')">Top Picks</button>
       <button class="filter-btn" data-type="available" onclick="setFilter(this,'available')">Available Now</button>
+      <button class="filter-btn" data-type="shortlisted" onclick="setFilter(this,'shortlisted')">❤ Shortlisted</button>
       <button class="filter-btn" id="discover-tab-btn" onclick="toggleDiscoverPanel(this)">Discover <span class="filter-badge" id="inbox-badge" style="display:none">0</span></button>
       <div class="price-filter">
         <label>Max $/mo:</label>
         <input type="number" id="max-price-input" placeholder="3500" min="1000" max="10000" step="100"
                onchange="applyFilters()" />
+      </div>
+      <div class="commute-row">
+        <label>Commute:</label>
+        <input type="text" id="commute-input" placeholder="Work address…"
+               onkeydown="if(event.key==='Enter')setCommuteAnchor()" />
+        <button onclick="setCommuteAnchor()">Set</button>
+      </div>
+      <div class="amenity-filter-row">
+        <button class="amenity-filter-pill" data-amenity="parking"     onclick="toggleAmenityFilter('parking',this)">Parking</button>
+        <button class="amenity-filter-pill" data-amenity="pool"        onclick="toggleAmenityFilter('pool',this)">Pool</button>
+        <button class="amenity-filter-pill" data-amenity="washer_dryer" onclick="toggleAmenityFilter('washer_dryer',this)">W/D</button>
+        <button class="amenity-filter-pill" data-amenity="balcony"     onclick="toggleAmenityFilter('balcony',this)">Balcony</button>
+        <button class="amenity-filter-pill" data-amenity="gym"         onclick="toggleAmenityFilter('gym',this)">Gym</button>
+        <button class="amenity-filter-pill" data-amenity="ev_charging" onclick="toggleAmenityFilter('ev_charging',this)">EV</button>
       </div>
     </div>
     <div id="cards-list"></div>
@@ -585,6 +718,20 @@
   </div>
 </div>
 
+<!-- Comparison overlay -->
+<div id="compare-overlay" class="compare-overlay" onclick="closeCompare(event)">
+  <div class="compare-card" onclick="event.stopPropagation()">
+    <div class="compare-header">
+      <span class="compare-title">Apartment Comparison</span>
+      <div class="compare-header-btns">
+        <button class="compare-print-btn" onclick="printCompare()">⎙ Print / Share</button>
+        <button class="compare-close-btn" onclick="closeCompare()">✕ Close</button>
+      </div>
+    </div>
+    <div id="compare-content"></div>
+  </div>
+</div>
+
 <script>
 // ── State ───────────────────────────────────────────────────────────────────
 let allLocations = [];
@@ -592,6 +739,16 @@ let markers = {};
 let activeId = null;
 let currentFilter = 'all';
 let map;
+let compareIds = new Set();        // apartment IDs selected for comparison
+let commuteAnchor = null;          // {name, lat, lon} – stored in localStorage
+let commuteMarker = null;          // Leaflet marker for commute anchor
+let requiredAmenities = new Set(); // amenity keys that must be present
+
+const AMENITY_LABELS = {
+  parking: 'Parking', pool: 'Pool', gym: 'Gym on-site', washer_dryer: 'In-unit W/D',
+  balcony: 'Balcony', ev_charging: 'EV Charging', storage: 'Storage', furnished: 'Furnished',
+};
+const ALL_AMENITIES = Object.keys(AMENITY_LABELS);
 
 // ── Map init ────────────────────────────────────────────────────────────────
 function initMap() {
@@ -652,19 +809,38 @@ function getFilteredLocations() {
   const maxPrice = parseInt(document.getElementById('max-price-input').value) || Infinity;
   return allLocations.filter(loc => {
     if (currentFilter === 'top' && !loc.is_top_pick) return false;
+    if (currentFilter === 'shortlisted') {
+      if (loc.location_type !== 'apartment') return false;
+      if (loc.verdict !== 'up') return false;
+    }
     if (currentFilter === 'available') {
       if (loc.location_type !== 'apartment') return true;
       return (loc.available_count || 0) > 0;
     }
-    if (currentFilter !== 'all' && currentFilter !== 'top' && currentFilter !== 'available') {
+    if (!['all','top','available','shortlisted'].includes(currentFilter)) {
       if (loc.location_type !== currentFilter) return false;
     }
     if (loc.location_type === 'apartment' && loc.units && loc.units.length > 0) {
       const prices = loc.units.filter(u => u.price_min).map(u => u.price_min);
       if (prices.length && Math.min(...prices) > maxPrice) return false;
     }
+    // Amenity filter – only applied to apartments
+    if (requiredAmenities.size > 0 && loc.location_type === 'apartment') {
+      const locAmenities = new Set(loc.amenities || []);
+      for (const req of requiredAmenities) {
+        if (!locAmenities.has(req)) return false;
+      }
+    }
     return true;
   }).sort((a, b) => {
+    // If commute anchor set and browsing apartments, sort by commute time
+    if (commuteAnchor && (currentFilter === 'apartment' || currentFilter === 'shortlisted')) {
+      if (a.location_type === 'apartment' && b.location_type === 'apartment') {
+        const ta = driveMins(a, commuteAnchor);
+        const tb = driveMins(b, commuteAnchor);
+        if (ta !== tb) return ta - tb;
+      }
+    }
     const as = a.decision_insight?.score ?? -1;
     const bs = b.decision_insight?.score ?? -1;
     if (bs !== as) return bs - as;
@@ -691,9 +867,43 @@ function renderCards() {
       ? `<span class="decision-chip">Score ${loc.decision_insight.score}<small>${loc.decision_insight.summary}</small></span>`
       : '';
 
+    // Amenity pills (top 4)
+    const amenityPills = (loc.amenities || []).slice(0, 4)
+      .map(a => `<span class="amenity-pill">${AMENITY_LABELS[a] || a}</span>`).join('');
+    const amenityPillsHtml = amenityPills ? `<div class="amenity-pills">${amenityPills}</div>` : '';
+
+    // Commute time badge
+    const commuteHtml = commuteAnchor && loc.location_type === 'apartment' && loc.lat && loc.lon
+      ? `<div class="commute-time-badge">🚗 ${driveMins(loc, commuteAnchor)} min to ${escHtml(commuteAnchor.name)}</div>`
+      : '';
+
+    // Verdict row
+    const v = loc.verdict || 'neutral';
+    const verdictHtml = loc.location_type === 'apartment'
+      ? `<div class="verdict-row">
+           <button class="verdict-btn ${v === 'up' ? 'up' : ''}"
+             onclick="event.stopPropagation();setVerdict(${loc.id},'up')" title="Shortlist">👍</button>
+           <button class="verdict-btn ${v === 'down' ? 'down' : ''}"
+             onclick="event.stopPropagation();setVerdict(${loc.id},'down')" title="Pass">👎</button>
+           <span class="verdict-label">${v === 'up' ? 'Shortlisted' : v === 'down' ? 'Passed' : ''}</span>
+         </div>`
+      : '';
+
+    // Compare checkbox (apartments only)
+    const compareHtml = loc.location_type === 'apartment'
+      ? `<input type="checkbox" class="compare-check"
+           ${compareIds.has(loc.id) ? 'checked' : ''}
+           onclick="event.stopPropagation();toggleCompare(${loc.id},this)"
+           title="Add to comparison" />`
+      : '';
+
+    // Shift star icon left when compare checkbox is present
+    const starStyle = loc.location_type === 'apartment' ? 'right:28px' : '';
+
     card.innerHTML = `
-      ${loc.is_top_pick ? '<div class="card-top-icon">⭐</div>' : ''}
-      <div class="card-name">${loc.name}</div>
+      ${loc.is_top_pick ? `<div class="card-top-icon" style="${starStyle}">⭐</div>` : ''}
+      ${compareHtml}
+      <div class="card-name" style="padding-right:${loc.is_top_pick ? '52px' : loc.location_type === 'apartment' ? '26px' : '8px'}">${loc.name}</div>
       <div class="card-area">${areaFromAddress(loc.address)}</div>
       <div class="card-meta">
         <span class="badge ${BADGE_CLASS[loc.location_type]}">${TYPE_LABEL[loc.location_type]}</span>
@@ -702,6 +912,9 @@ function renderCards() {
         <span class="card-rating">${loc.rating ? '⭐ ' + loc.rating.toFixed(1) : ''}</span>
       </div>
       ${priceHtml}
+      ${amenityPillsHtml}
+      ${commuteHtml}
+      ${verdictHtml}
     `;
     list.appendChild(card);
   });
@@ -742,6 +955,12 @@ function renderDetail(loc) {
 
   // Proximity: show nearest of other types
   const proximityHtml = buildProximity(loc);
+
+  // Pros / Cons section
+  const prosConsHtml = loc.location_type === 'apartment' ? buildProsCons(loc) : '';
+
+  // Amenities checklist section
+  const amenitiesHtml = loc.location_type === 'apartment' ? buildAmenitiesSection(loc) : '';
 
   // Units table
   let unitsHtml = '';
@@ -801,7 +1020,9 @@ function renderDetail(loc) {
       ${loc.review_count ? ` · ${loc.review_count.toLocaleString()} reviews` : ''}
     </div>
     ${loc.notes ? `<div class="detail-notes">${loc.notes}</div>` : ''}
+    ${prosConsHtml}
     ${unitsHtml}
+    ${amenitiesHtml}
     ${proximityHtml}
     ${loc.website_url ? `<a class="detail-link" href="${loc.website_url}" target="_blank" rel="noopener">↗ Visit website</a>` : ''}
     ${loc.phone ? `<div style="font-size:.75rem;margin-top:6px;color:var(--bark)">📞 ${loc.phone}</div>` : ''}
@@ -1451,12 +1672,358 @@ async function trackDiscoveredItem(btn) {
   }
 }
 
+// ── Verdict ─────────────────────────────────────────────────────────────────
+async function setVerdict(id, verdict) {
+  const loc = allLocations.find(l => l.id === id);
+  const current = loc?.verdict || 'neutral';
+  const newVerdict = current === verdict ? 'neutral' : verdict; // toggle off if same
+  try {
+    await fetch(`/api/locations/${id}/verdict`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verdict: newVerdict }),
+    });
+    if (loc) loc.verdict = newVerdict;
+    renderCards();
+    if (activeId === id) renderDetail(loc);
+  } catch (e) { console.error('setVerdict failed:', e); }
+}
+
+// ── Amenities (detail panel) ─────────────────────────────────────────────────
+function buildAmenitiesSection(loc) {
+  const amenities = loc.amenities || [];
+  const checkboxes = ALL_AMENITIES.map(key =>
+    `<label class="amenity-item">
+       <input type="checkbox" ${amenities.includes(key) ? 'checked' : ''}
+         onchange="toggleAmenity(${loc.id},'${key}',this.checked)" />
+       ${AMENITY_LABELS[key]}
+     </label>`
+  ).join('');
+  return `<div class="section-title">Amenities</div>
+    <div class="amenities-grid">${checkboxes}</div>`;
+}
+
+async function toggleAmenity(locId, key, checked) {
+  const loc = allLocations.find(l => l.id === locId);
+  if (!loc) return;
+  const amenities = [...(loc.amenities || [])];
+  if (checked && !amenities.includes(key)) amenities.push(key);
+  else if (!checked) { const i = amenities.indexOf(key); if (i >= 0) amenities.splice(i, 1); }
+  try {
+    await fetch(`/api/locations/${locId}/amenities`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amenities }),
+    });
+    loc.amenities = amenities;
+    renderCards(); // refresh pills
+  } catch (e) { console.error('toggleAmenity failed:', e); }
+}
+
+// ── Amenity filter (left panel pills) ────────────────────────────────────────
+function toggleAmenityFilter(amenity, btn) {
+  if (requiredAmenities.has(amenity)) {
+    requiredAmenities.delete(amenity);
+    btn.classList.remove('active');
+  } else {
+    requiredAmenities.add(amenity);
+    btn.classList.add('active');
+  }
+  renderCards();
+}
+
+// ── Pros / Cons ──────────────────────────────────────────────────────────────
+function buildProsCons(loc) {
+  const pros = loc.pros || [];
+  const cons = loc.cons || [];
+  const proItems = pros.map((p, i) =>
+    `<div class="pc-item">
+       <span class="pc-dot">✓</span>
+       <span style="flex:1">${escHtml(p)}</span>
+       <button class="pc-remove" onclick="removePro(${loc.id},${i})" title="Remove">×</button>
+     </div>`
+  ).join('');
+  const conItems = cons.map((c, i) =>
+    `<div class="pc-item">
+       <span class="pc-dot">✗</span>
+       <span style="flex:1">${escHtml(c)}</span>
+       <button class="pc-remove" onclick="removeCon(${loc.id},${i})" title="Remove">×</button>
+     </div>`
+  ).join('');
+  return `<div class="section-title">Pros &amp; Cons</div>
+    <div class="pros-cons-row">
+      <div class="pros-box">
+        <div class="pc-title pro">Pros</div>
+        ${proItems || '<div style="font-size:.7rem;color:#aaa;font-style:italic">None yet</div>'}
+        <div class="pc-add-row">
+          <input class="pc-add-input" id="pro-input-${loc.id}" placeholder="Add a pro…"
+            onkeydown="if(event.key==='Enter'){addPro(${loc.id});event.preventDefault()}" />
+          <button class="pc-add-btn" onclick="addPro(${loc.id})">+</button>
+        </div>
+      </div>
+      <div class="cons-box">
+        <div class="pc-title con">Cons</div>
+        ${conItems || '<div style="font-size:.7rem;color:#aaa;font-style:italic">None yet</div>'}
+        <div class="pc-add-row">
+          <input class="pc-add-input" id="con-input-${loc.id}" placeholder="Add a con…"
+            onkeydown="if(event.key==='Enter'){addCon(${loc.id});event.preventDefault()}" />
+          <button class="pc-add-btn" onclick="addCon(${loc.id})">+</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function addPro(locId) {
+  const input = document.getElementById(`pro-input-${locId}`);
+  const text = (input.value || '').trim();
+  if (!text) return;
+  const loc = allLocations.find(l => l.id === locId);
+  if (!loc) return;
+  await _saveProsConsForLoc(locId, loc, [...(loc.pros || []), text], loc.cons || []);
+  input.value = '';
+}
+
+async function addCon(locId) {
+  const input = document.getElementById(`con-input-${locId}`);
+  const text = (input.value || '').trim();
+  if (!text) return;
+  const loc = allLocations.find(l => l.id === locId);
+  if (!loc) return;
+  await _saveProsConsForLoc(locId, loc, loc.pros || [], [...(loc.cons || []), text]);
+  input.value = '';
+}
+
+async function removePro(locId, idx) {
+  const loc = allLocations.find(l => l.id === locId);
+  if (!loc) return;
+  await _saveProsConsForLoc(locId, loc, (loc.pros || []).filter((_,i) => i !== idx), loc.cons || []);
+}
+
+async function removeCon(locId, idx) {
+  const loc = allLocations.find(l => l.id === locId);
+  if (!loc) return;
+  await _saveProsConsForLoc(locId, loc, loc.pros || [], (loc.cons || []).filter((_,i) => i !== idx));
+}
+
+async function _saveProsConsForLoc(locId, loc, pros, cons) {
+  try {
+    await fetch(`/api/locations/${locId}/pros-cons`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pros, cons }),
+    });
+    loc.pros = pros;
+    loc.cons = cons;
+    if (activeId === locId) renderDetail(loc);
+  } catch (e) { console.error('saveProsConsForLoc failed:', e); }
+}
+
+// ── Comparison view ──────────────────────────────────────────────────────────
+function toggleCompare(id, checkbox) {
+  if (checkbox.checked) {
+    if (compareIds.size >= 3) {
+      alert('You can compare up to 3 apartments at a time.');
+      checkbox.checked = false;
+      return;
+    }
+    compareIds.add(id);
+  } else {
+    compareIds.delete(id);
+  }
+  updateCompareFab();
+  renderCards(); // re-render to sync checkbox states
+}
+
+function updateCompareFab() {
+  const fab = document.getElementById('compare-fab');
+  if (compareIds.size >= 2) {
+    fab.style.display = '';
+    fab.textContent = `⊞ Compare (${compareIds.size})`;
+  } else {
+    fab.style.display = 'none';
+  }
+}
+
+function openCompare() {
+  const apts = allLocations.filter(l => compareIds.has(l.id));
+  if (apts.length < 2) return;
+  document.getElementById('compare-overlay').classList.add('open');
+  renderCompareTable(apts);
+}
+
+function closeCompare(event) {
+  if (!event || event.target.id === 'compare-overlay') {
+    document.getElementById('compare-overlay').classList.remove('open');
+  }
+}
+
+function renderCompareTable(apts) {
+  // Returns class to apply: 'best', 'worst', or '' for each value in an array of numbers
+  function markBestWorst(nums, lowerIsBetter = false) {
+    const valid = nums.filter(v => v !== null && v !== undefined);
+    if (valid.length < 2) return nums.map(() => '');
+    const best  = lowerIsBetter ? Math.min(...valid) : Math.max(...valid);
+    const worst = lowerIsBetter ? Math.max(...valid) : Math.min(...valid);
+    return nums.map(v => (v === null || v === undefined) ? '' : v === best ? 'best' : v === worst ? 'worst' : '');
+  }
+
+  const commuteRow = commuteAnchor ? [{
+    label: `Commute`,
+    values: apts.map(a => a.lat && a.lon ? `~${driveMins(a, commuteAnchor)} min` : '—'),
+    classes: markBestWorst(apts.map(a => a.lat && a.lon ? driveMins(a, commuteAnchor) : null), true),
+  }] : [];
+
+  const rows = [
+    {
+      label: 'Name',
+      values: apts.map(a => `<strong style="font-family:'DM Serif Display',serif;font-size:.95rem">${escHtml(a.name)}</strong>`),
+      classes: apts.map(() => ''),
+    },
+    {
+      label: 'Score',
+      values: apts.map(a => a.decision_insight ? `${a.decision_insight.score}/100` : '—'),
+      classes: markBestWorst(apts.map(a => a.decision_insight?.score ?? null)),
+    },
+    {
+      label: 'Price',
+      values: apts.map(a => a.price_range || '—'),
+      classes: markBestWorst(apts.map(a => {
+        const prices = (a.units || []).map(u => u.price_min).filter(Boolean);
+        return prices.length ? Math.min(...prices) : null;
+      }), true),
+    },
+    {
+      label: 'Available',
+      values: apts.map(a => {
+        const n = (a.units || []).filter(u => u.available).length;
+        return n ? `${n} unit${n !== 1 ? 's' : ''}` : 'None';
+      }),
+      classes: markBestWorst(apts.map(a => (a.units || []).filter(u => u.available).length)),
+    },
+    {
+      label: 'Rating',
+      values: apts.map(a => a.rating ? `⭐ ${a.rating.toFixed(1)}` : '—'),
+      classes: markBestWorst(apts.map(a => a.rating ?? null)),
+    },
+    ...commuteRow,
+    {
+      label: 'Amenities',
+      values: apts.map(a => {
+        const ams = (a.amenities || []).map(k => AMENITY_LABELS[k] || k);
+        return ams.length ? ams.join(', ') : '—';
+      }),
+      classes: apts.map(() => ''),
+    },
+    {
+      label: 'Pros',
+      values: apts.map(a => (a.pros || []).length
+        ? (a.pros || []).map(p => `<div>✓ ${escHtml(p)}</div>`).join('')
+        : '<span style="color:#aaa">—</span>'),
+      classes: apts.map(() => ''),
+    },
+    {
+      label: 'Cons',
+      values: apts.map(a => (a.cons || []).length
+        ? (a.cons || []).map(c => `<div>✗ ${escHtml(c)}</div>`).join('')
+        : '<span style="color:#aaa">—</span>'),
+      classes: apts.map(() => ''),
+    },
+    {
+      label: 'Verdict',
+      values: apts.map(a => a.verdict === 'up' ? '👍 Shortlisted' : a.verdict === 'down' ? '👎 Passed' : '—'),
+      classes: apts.map(() => ''),
+    },
+  ];
+
+  const html = rows.map(row =>
+    `<div class="compare-row">
+       <div class="compare-label">${row.label}</div>
+       ${row.values.map((v, i) => `<div class="compare-cell ${row.classes[i] || ''}">${v}</div>`).join('')}
+     </div>`
+  ).join('');
+
+  document.getElementById('compare-content').innerHTML = `<div class="compare-grid">${html}</div>`;
+}
+
+function printCompare() {
+  const content = document.getElementById('compare-content').innerHTML;
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <title>Apartment Comparison – Palm Beach Hunt</title>
+    <style>
+      body { font-family: sans-serif; padding: 24px; color: #3a2e24; }
+      h1 { font-family: Georgia, serif; font-size: 1.4rem; margin-bottom: 4px; }
+      .sub { color: #7a6a54; font-size: .85rem; margin-bottom: 20px; }
+      .compare-grid { border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
+      .compare-row { display: flex; }
+      .compare-row + .compare-row { border-top: 1px solid #e0d8cc; }
+      .compare-label { min-width: 110px; width: 110px; background: #f0ece4; padding: 8px 10px; font-size: .66rem; font-weight: 700; color: #7a6a54; text-transform: uppercase; display: flex; align-items: center; }
+      .compare-cell { flex: 1; padding: 8px 10px; font-size: .8rem; border-left: 1px solid #e0d8cc; }
+      .compare-cell.best  { background: #eef7ee; font-weight: 600; }
+      .compare-cell.worst { background: #fdf2f0; }
+    </style>
+  </head><body>
+    <h1>🌴 Palm Beach Apartment Comparison</h1>
+    <div class="sub">Generated ${new Date().toLocaleString()}</div>
+    ${content}
+  </body></html>`);
+  w.document.close();
+  w.print();
+}
+
+// ── Commute anchor ────────────────────────────────────────────────────────────
+function loadCommuteAnchor() {
+  try {
+    const saved = localStorage.getItem('commuteAnchor');
+    if (saved) {
+      commuteAnchor = JSON.parse(saved);
+      const input = document.getElementById('commute-input');
+      if (input) { input.value = commuteAnchor.name; input.style.color = 'var(--teal)'; }
+    }
+  } catch (_) {}
+}
+
+async function setCommuteAnchor() {
+  const input = document.getElementById('commute-input');
+  const q = (input.value || '').trim();
+  if (!q) {
+    commuteAnchor = null;
+    localStorage.removeItem('commuteAnchor');
+    input.style.color = '';
+    if (commuteMarker) { commuteMarker.remove(); commuteMarker = null; }
+    renderCards();
+    return;
+  }
+  try {
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+    if (!res.ok) throw new Error('Not found');
+    const data = await res.json();
+    commuteAnchor = { name: q, lat: data.lat, lon: data.lon };
+    localStorage.setItem('commuteAnchor', JSON.stringify(commuteAnchor));
+    input.style.color = 'var(--teal)';
+    if (commuteMarker) commuteMarker.remove();
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:12px;height:12px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
+      iconSize: [12, 12], iconAnchor: [6, 6],
+    });
+    commuteMarker = L.marker([commuteAnchor.lat, commuteAnchor.lon], { icon })
+      .addTo(map)
+      .bindTooltip(`🚗 ${commuteAnchor.name}`, { permanent: false, direction: 'top', offset: [0, -8] });
+    renderCards();
+  } catch (_) {
+    alert(`Could not geocode "${q}". Try a more specific address.`);
+    input.style.color = 'var(--coral)';
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 initMap();
 addAnchors();
 loadLocations();
 loadChanges();
 updateInboxBadge();
+loadCommuteAnchor();
 </script>
 </body>
 </html>
