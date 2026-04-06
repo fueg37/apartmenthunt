@@ -322,13 +322,6 @@ def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, 
     if loc.rating:
         reasons.append(f"Rated {loc.rating:.1f}★ by users")
 
-    if loc.last_scraped:
-        age_hours = max((datetime.utcnow() - loc.last_scraped).total_seconds() / 3600.0, 0.0)
-        freshness_component = _clamp(100.0 - (age_hours * 2.5))
-    else:
-        freshness_component = 35.0
-    components["freshness"] = freshness_component
-
     top_pick_component = 100.0 if loc.is_top_pick else 0.0
     components["priority_signal"] = top_pick_component
     if loc.is_top_pick:
@@ -360,11 +353,10 @@ def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, 
             reasons.append("No units currently flagged available")
 
         weights = {
-            "affordability": 0.32,
-            "availability": 0.28,
-            "rating": 0.20,
-            "freshness": 0.12,
-            "priority_signal": 0.08,
+            "affordability": 0.36,
+            "availability": 0.32,
+            "rating": 0.23,
+            "priority_signal": 0.09,
         }
     else:
         if isinstance(loc, Gym):
@@ -376,10 +368,9 @@ def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, 
         components["type_fit"] = type_focus
 
         weights = {
-            "type_fit": 0.45,
-            "rating": 0.30,
-            "freshness": 0.18,
-            "priority_signal": 0.07,
+            "type_fit": 0.55,
+            "rating": 0.37,
+            "priority_signal": 0.08,
         }
 
     weighted_score = sum(components[key] * weight for key, weight in weights.items())
@@ -404,7 +395,7 @@ def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, 
         "summary": summary,
         "components": {k: int(round(v)) for k, v in components.items()},
         "reasons": reasons[:3],
-        "version": "v1",
+        "version": "v2",
     }
 
 
