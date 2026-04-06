@@ -545,6 +545,16 @@
     .compare-cell.best  { background: #eef7ee; }
     .compare-cell.worst { background: #fdf2f0; }
 
+    /* ── Subtype badge ── */
+    .badge-subtype {
+      font-size: .63rem; padding: 2px 7px; border-radius: 10px; font-weight: 600;
+      background: #e8e0f4; color: #4a2a7a;
+    }
+    .subtype-select {
+      font-size: .76rem; border: 1px solid #ccbca3; border-radius: 6px;
+      padding: 4px 6px; background: #fff; cursor: pointer; color: var(--dark);
+    }
+
     /* ── Commute anchor ── */
     .commute-row { display: flex; align-items: center; gap: 4px; width: 100%; margin-top: 4px; }
     .commute-row label { font-size: .7rem; color: var(--bark); white-space: nowrap; }
@@ -600,6 +610,12 @@
         <button class="amenity-filter-pill" data-amenity="balcony"     onclick="toggleAmenityFilter('balcony',this)">Balcony</button>
         <button class="amenity-filter-pill" data-amenity="gym"         onclick="toggleAmenityFilter('gym',this)">Gym</button>
         <button class="amenity-filter-pill" data-amenity="ev_charging" onclick="toggleAmenityFilter('ev_charging',this)">EV</button>
+      </div>
+      <div class="amenity-filter-row" id="subtype-filter-row">
+        <button class="amenity-filter-pill" data-subtype="apartment"  onclick="toggleSubtypeFilter('apartment',this)">Apt</button>
+        <button class="amenity-filter-pill" data-subtype="townhome"   onclick="toggleSubtypeFilter('townhome',this)">Townhome</button>
+        <button class="amenity-filter-pill" data-subtype="condo"      onclick="toggleSubtypeFilter('condo',this)">Condo</button>
+        <button class="amenity-filter-pill" data-subtype="studio"     onclick="toggleSubtypeFilter('studio',this)">Studio</button>
       </div>
     </div>
     <div id="cards-list"></div>
@@ -746,6 +762,7 @@ let compareIds = new Set();        // apartment IDs selected for comparison
 let commuteAnchor = null;          // {name, lat, lon} – stored in localStorage
 let commuteMarker = null;          // Leaflet marker for commute anchor
 let requiredAmenities = new Set(); // amenity keys that must be present
+let activeSubtypes = new Set();    // subtype filter (empty = all)
 
 const AMENITY_LABELS = {
   parking: 'Parking', pool: 'Pool', gym: 'Gym on-site', washer_dryer: 'In-unit W/D',
@@ -834,6 +851,10 @@ function getFilteredLocations() {
         if (!locAmenities.has(req)) return false;
       }
     }
+    // Subtype filter – only applied to apartments
+    if (activeSubtypes.size > 0 && loc.location_type === 'apartment') {
+      if (!activeSubtypes.has(loc.subtype || 'apartment')) return false;
+    }
     return true;
   }).sort((a, b) => {
     // If commute anchor set and browsing apartments, sort by commute time
@@ -903,6 +924,10 @@ function renderCards() {
     // Shift star icon left when compare checkbox is present
     const starStyle = loc.location_type === 'apartment' ? 'right:28px' : '';
 
+    const subtypeLabel = { apartment: 'Apt', townhome: 'Townhome', condo: 'Condo', studio: 'Studio' };
+    const subtypeBadge = loc.location_type === 'apartment' && loc.subtype && loc.subtype !== 'apartment'
+      ? `<span class="badge badge-subtype">${subtypeLabel[loc.subtype] || loc.subtype}</span>` : '';
+
     card.innerHTML = `
       ${loc.is_top_pick ? `<div class="card-top-icon" style="${starStyle}">⭐</div>` : ''}
       ${compareHtml}
@@ -910,6 +935,7 @@ function renderCards() {
       <div class="card-area">${areaFromAddress(loc.address)}</div>
       <div class="card-meta">
         <span class="badge ${BADGE_CLASS[loc.location_type]}">${TYPE_LABEL[loc.location_type]}</span>
+        ${subtypeBadge}
         ${loc.is_top_pick ? '<span class="badge badge-top">TOP PICK</span>' : ''}
         ${decisionHtml}
         <span class="card-rating">${loc.rating ? '⭐ ' + loc.rating.toFixed(1) : ''}</span>
@@ -1023,6 +1049,13 @@ function renderDetail(loc) {
     <div class="detail-badges">
       <span class="badge ${BADGE_CLASS[loc.location_type]}">${TYPE_LABEL[loc.location_type]}</span>
       ${loc.is_top_pick ? '<span class="badge badge-top">TOP PICK</span>' : ''}
+      ${loc.location_type === 'apartment' ? `
+        <select class="subtype-select" onchange="setSubtype(${loc.id}, this.value)">
+          <option value="apartment"  ${(loc.subtype||'apartment')==='apartment'  ? 'selected':''}>Apartment</option>
+          <option value="townhome"   ${(loc.subtype||'')==='townhome'  ? 'selected':''}>Townhome</option>
+          <option value="condo"      ${(loc.subtype||'')==='condo'     ? 'selected':''}>Condo</option>
+          <option value="studio"     ${(loc.subtype||'')==='studio'    ? 'selected':''}>Studio</option>
+        </select>` : ''}
     </div>
     <div class="detail-rating">
       ${loc.rating ? `⭐ <strong>${loc.rating.toFixed(1)}</strong>` : ''}
@@ -1892,7 +1925,10 @@ function renderCompareTable(apts) {
   const rows = [
     {
       label: 'Name',
-      values: apts.map(a => `<strong style="font-family:'DM Serif Display',serif;font-size:.95rem">${escHtml(a.name)}</strong>`),
+      values: apts.map(a => {
+        const sub = a.subtype && a.subtype !== 'apartment' ? ` <span style="font-size:.7rem;color:#7a6a54">(${a.subtype})</span>` : '';
+        return `<strong style="font-family:'DM Serif Display',serif;font-size:.95rem">${escHtml(a.name)}</strong>${sub}`;
+      }),
       classes: apts.map(() => ''),
     },
     {
@@ -1985,6 +2021,31 @@ function printCompare() {
   </body></html>`);
   w.document.close();
   w.print();
+}
+
+// ── Subtype ───────────────────────────────────────────────────────────────────
+async function setSubtype(id, subtype) {
+  try {
+    await fetch(`/api/locations/${id}/subtype`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subtype }),
+    });
+    const loc = allLocations.find(l => l.id === id);
+    if (loc) loc.subtype = subtype;
+    renderCards();
+  } catch (e) { console.error('setSubtype failed:', e); }
+}
+
+function toggleSubtypeFilter(subtype, btn) {
+  if (activeSubtypes.has(subtype)) {
+    activeSubtypes.delete(subtype);
+    btn.classList.remove('active');
+  } else {
+    activeSubtypes.add(subtype);
+    btn.classList.add('active');
+  }
+  renderCards();
 }
 
 // ── Commute anchor ────────────────────────────────────────────────────────────

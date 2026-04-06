@@ -253,6 +253,10 @@ class VerdictRequest(BaseModel):
     verdict: str  # "up", "down", or "neutral"
 
 
+class SubtypeRequest(BaseModel):
+    subtype: str  # "apartment", "townhome", "condo", "studio"
+
+
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
@@ -614,6 +618,19 @@ async def api_update_pros_cons(loc_id: int, payload: ProsConsRequest) -> JSONRes
     return JSONResponse({"pros": payload.pros, "cons": payload.cons})
 
 
+@app.patch("/api/locations/{loc_id}/subtype")
+async def api_update_subtype(loc_id: int, payload: SubtypeRequest) -> JSONResponse:
+    """Set the housing subtype for an apartment location."""
+    valid = {"apartment", "townhome", "condo", "studio"}
+    if payload.subtype not in valid:
+        raise HTTPException(400, f"subtype must be one of: {', '.join(sorted(valid))}")
+    async with get_db() as db:
+        ok = await _patch_extra_json(db, loc_id, {"subtype": payload.subtype})
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"subtype": payload.subtype})
+
+
 @app.patch("/api/locations/{loc_id}/verdict")
 async def api_update_verdict(loc_id: int, payload: VerdictRequest) -> JSONResponse:
     """Set a thumbs-up / thumbs-down / neutral verdict on a location."""
@@ -905,6 +922,7 @@ def _loc_to_dict(loc) -> dict[str, Any]:
     data["pros"] = loc.extra.get("pros", [])
     data["cons"] = loc.extra.get("cons", [])
     data["verdict"] = loc.extra.get("verdict", "neutral")
+    data["subtype"] = loc.extra.get("subtype", "apartment")
     return data
 
 
