@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS change_log (
 
 CREATE INDEX IF NOT EXISTS idx_change_log_location ON change_log(location_id, changed_at DESC);
 
+CREATE TABLE IF NOT EXISTS settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS discoveries (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     name           TEXT    NOT NULL,
