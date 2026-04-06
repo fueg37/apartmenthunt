@@ -240,6 +240,19 @@ class ManualUnitsRequest(BaseModel):
     units: list[ManualUnitInput]
 
 
+class AmenitiesRequest(BaseModel):
+    amenities: list[str]
+
+
+class ProsConsRequest(BaseModel):
+    pros: list[str] = Field(default_factory=list)
+    cons: list[str] = Field(default_factory=list)
+
+
+class VerdictRequest(BaseModel):
+    verdict: str  # "up", "down", or "neutral"
+
+
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
@@ -563,6 +576,65 @@ async def api_delete_manual_units(loc_id: int) -> JSONResponse:
     return JSONResponse({"status": "manual units cleared", "id": loc_id})
 
 
+async def _patch_extra_json(db: Any, loc_id: int, updates: dict[str, Any]) -> bool:
+    """Merge updates into a location's extra_json field."""
+    cur = await db.execute("SELECT extra_json FROM locations WHERE id=?", (loc_id,))
+    row = await cur.fetchone()
+    if not row:
+        return False
+    extra = json.loads(row["extra_json"] or "{}")
+    extra.update(updates)
+    await db.execute(
+        "UPDATE locations SET extra_json=? WHERE id=?",
+        (json.dumps(extra), loc_id),
+    )
+    await db.commit()
+    return True
+
+
+@app.patch("/api/locations/{loc_id}/amenities")
+async def api_update_amenities(loc_id: int, payload: AmenitiesRequest) -> JSONResponse:
+    """Set the amenities list for a location."""
+    async with get_db() as db:
+        ok = await _patch_extra_json(db, loc_id, {"amenities": payload.amenities})
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"amenities": payload.amenities})
+
+
+@app.patch("/api/locations/{loc_id}/pros-cons")
+async def api_update_pros_cons(loc_id: int, payload: ProsConsRequest) -> JSONResponse:
+    """Set the pros and cons lists for a location."""
+    async with get_db() as db:
+        ok = await _patch_extra_json(
+            db, loc_id, {"pros": payload.pros, "cons": payload.cons}
+        )
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"pros": payload.pros, "cons": payload.cons})
+
+
+@app.patch("/api/locations/{loc_id}/verdict")
+async def api_update_verdict(loc_id: int, payload: VerdictRequest) -> JSONResponse:
+    """Set a thumbs-up / thumbs-down / neutral verdict on a location."""
+    if payload.verdict not in ("up", "down", "neutral"):
+        raise HTTPException(400, "verdict must be 'up', 'down', or 'neutral'")
+    async with get_db() as db:
+        ok = await _patch_extra_json(db, loc_id, {"verdict": payload.verdict})
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"verdict": payload.verdict})
+
+
+@app.get("/api/geocode")
+async def api_geocode(q: str = Query(...)) -> JSONResponse:
+    """Geocode an address or place name. Returns {lat, lon, address}."""
+    lat, lon, address = await _geocode_query(q)
+    if lat is None:
+        raise HTTPException(404, "Could not geocode that query")
+    return JSONResponse({"lat": lat, "lon": lon, "address": address})
+
+
 @app.get("/api/changes")
 async def api_changes(
     since_hours: int = Query(24, ge=1, le=720),
@@ -828,6 +900,11 @@ def _loc_to_dict(loc) -> dict[str, Any]:
     if isinstance(loc, PointOfInterest):
         data["category"] = loc.category
         data["weight"] = loc.weight
+    # User-defined extra fields persisted in extra_json
+    data["amenities"] = loc.extra.get("amenities", [])
+    data["pros"] = loc.extra.get("pros", [])
+    data["cons"] = loc.extra.get("cons", [])
+    data["verdict"] = loc.extra.get("verdict", "neutral")
     return data
 
 
