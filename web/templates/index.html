@@ -2049,7 +2049,23 @@ function toggleSubtypeFilter(subtype, btn) {
 }
 
 // ── Commute anchor ────────────────────────────────────────────────────────────
-function loadCommuteAnchor() {
+async function loadCommuteAnchor() {
+  // Server is the primary source so the anchor persists across browsers/devices
+  // and is used for server-side score computation.
+  try {
+    const res = await fetch('/api/settings/commute-anchor');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.lat && data.lon) {
+        commuteAnchor = data;
+        const input = document.getElementById('commute-input');
+        if (input) { input.value = commuteAnchor.name; input.style.color = 'var(--teal)'; }
+        localStorage.setItem('commuteAnchor', JSON.stringify(commuteAnchor));
+        return;
+      }
+    }
+  } catch (_) {}
+  // Fall back to localStorage if server unavailable
   try {
     const saved = localStorage.getItem('commuteAnchor');
     if (saved) {
@@ -2068,7 +2084,8 @@ async function setCommuteAnchor() {
     localStorage.removeItem('commuteAnchor');
     input.style.color = '';
     if (commuteMarker) { commuteMarker.remove(); commuteMarker = null; }
-    renderCards();
+    await fetch('/api/settings/commute-anchor', { method: 'DELETE' });
+    await loadLocations();
     return;
   }
   try {
@@ -2087,7 +2104,13 @@ async function setCommuteAnchor() {
     commuteMarker = L.marker([commuteAnchor.lat, commuteAnchor.lon], { icon })
       .addTo(map)
       .bindTooltip(`🚗 ${commuteAnchor.name}`, { permanent: false, direction: 'top', offset: [0, -8] });
-    renderCards();
+    // Save to server so scores are recomputed server-side, then reload
+    await fetch('/api/settings/commute-anchor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(commuteAnchor),
+    });
+    await loadLocations();
   } catch (_) {
     alert(`Could not geocode "${q}". Try a more specific address.`);
     input.style.color = 'var(--coral)';

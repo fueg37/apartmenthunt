@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -21,6 +22,7 @@ from db.connection import get_db
 from db.locations import list_all, get_by_id, get_by_name, insert, delete_by_id
 from db.units import get_latest_units, save_manual_units, delete_manual_units
 from db.history import get_changes
+from db.settings import get_setting, set_setting, delete_setting
 import db.discoveries as disc_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
 
@@ -257,6 +259,12 @@ class SubtypeRequest(BaseModel):
     subtype: str  # "apartment", "townhome", "condo", "studio"
 
 
+class CommuteAnchorRequest(BaseModel):
+    name: str
+    lat: float
+    lon: float
+
+
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
@@ -311,53 +319,92 @@ def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, value))
 
 
-def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, Any]:
-    """Compute an opinionated decision score and transparent component breakdown."""
+def _drive_mins(lat1: float, lon1: float, lat2: float, lon2: float, mph: float = 24.0) -> int:
+    """Haversine drive-time estimate in minutes at average urban speed."""
+    R = 6371.0
+    rlat1, rlon1 = math.radians(lat1), math.radians(lon1)
+    rlat2, rlon2 = math.radians(lat2), math.radians(lon2)
+    dlat, dlon = rlat2 - rlat1, rlon2 - rlon1
+    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+    km = R * 2 * math.asin(math.sqrt(a))
+    return round(km * 0.621371 / mph * 60)
+
+
+def _decision_insight_for_location(
+    loc,
+    units: list | None = None,
+    commute_anchor: dict | None = None,
+    nearby_locs: list | None = None,
+) -> dict[str, Any]:
+    """Compute an opinionated decision score based purely on apartment quality metrics."""
     components: dict[str, float] = {}
+    base_weights: dict[str, float] = {}
     reasons: list[str] = []
 
+    # Rating (always included)
     rating = loc.rating or 0.0
-    rating_component = _clamp((rating / 5.0) * 100.0)
-    components["rating"] = rating_component
+    components["rating"] = _clamp((rating / 5.0) * 100.0)
+    base_weights["rating"] = 0.20
     if loc.rating:
         reasons.append(f"Rated {loc.rating:.1f}★ by users")
 
-    top_pick_component = 100.0 if loc.is_top_pick else 0.0
-    components["priority_signal"] = top_pick_component
+    # Top pick (always included)
+    components["priority_signal"] = 100.0 if loc.is_top_pick else 0.0
+    base_weights["priority_signal"] = 0.05
     if loc.is_top_pick:
         reasons.append("Marked as a top pick")
 
+    # Commute (conditional — only when anchor is saved)
+    if commute_anchor and loc.lat and loc.lon:
+        mins = _drive_mins(loc.lat, loc.lon, commute_anchor["lat"], commute_anchor["lon"])
+        # ≤10 min = 100, 30 min = 0
+        components["commute"] = _clamp(100.0 - max(0.0, mins - 10) * 5.0)
+        base_weights["commute"] = 0.20
+        reasons.append(f"~{mins} min drive to {commute_anchor['name']}")
+
+    # Proximity: nearest gym, grocery, or high-weight POI (conditional)
+    if nearby_locs and loc.lat and loc.lon:
+        gyms = [l for l in nearby_locs if isinstance(l, Gym) and l.lat and l.lon]
+        priority_pois = [
+            l for l in nearby_locs
+            if isinstance(l, PointOfInterest) and l.lat and l.lon
+            and (l.category == "grocery" or (l.weight or 0.0) >= 0.5)
+        ]
+        cat_scores: list[float] = []
+        for group in [gyms, priority_pois]:
+            if not group:
+                continue
+            nearest = min(_drive_mins(loc.lat, loc.lon, l.lat, l.lon) for l in group)
+            # ≤5 min = 100, 15 min = 0
+            cat_scores.append(_clamp(100.0 - max(0.0, nearest - 5) * 10.0))
+        if cat_scores:
+            components["proximity"] = sum(cat_scores) / len(cat_scores)
+            base_weights["proximity"] = 0.10
+
     if isinstance(loc, Apartment):
+        # Affordability (always included for apartments)
         unit_list = units or []
         priced = [u.price_min for u in unit_list if u.price_min is not None]
         if priced:
             cheapest = min(priced)
             target_budget = 3500
-            affordability_component = _clamp(100.0 - ((cheapest - 1800) / (target_budget - 1800)) * 100.0)
-            components["affordability"] = affordability_component
+            components["affordability"] = _clamp(100.0 - ((cheapest - 1800) / (target_budget - 1800)) * 100.0)
             reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
         elif unit_list:
-            # Units exist but all are "contact for pricing" — manual entries; treat as neutral
             components["affordability"] = 50.0
-            reasons.append("Pricing listed as contact-only; score is neutral until prices are known")
+            reasons.append("Pricing listed as contact-only")
         else:
             components["affordability"] = 40.0
-            reasons.append("No recent unit pricing detected")
+            reasons.append("No unit pricing detected")
+        base_weights["affordability"] = 0.35
 
-        available_count = sum(1 for u in unit_list if u.available)
-        availability_component = _clamp(available_count * 25.0)
-        components["availability"] = availability_component
-        if available_count:
-            reasons.append(f"{available_count} unit{'s' if available_count != 1 else ''} currently available")
-        else:
-            reasons.append("No units currently flagged available")
+        # Amenities (conditional — only if user has labeled any)
+        amenities = loc.extra.get("amenities", []) if hasattr(loc, "extra") else []
+        if amenities:
+            components["amenities"] = _clamp((len(amenities) / 8.0) * 100.0)
+            base_weights["amenities"] = 0.20
+            reasons.append(f"{len(amenities)} amenit{'y' if len(amenities) == 1 else 'ies'} confirmed")
 
-        weights = {
-            "affordability": 0.36,
-            "availability": 0.32,
-            "rating": 0.23,
-            "priority_signal": 0.09,
-        }
     else:
         if isinstance(loc, Gym):
             type_focus = 74.0
@@ -366,36 +413,31 @@ def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, 
         else:
             type_focus = 68.0
         components["type_fit"] = type_focus
+        base_weights["type_fit"] = 0.55
 
-        weights = {
-            "type_fit": 0.55,
-            "rating": 0.37,
-            "priority_signal": 0.08,
-        }
-
-    weighted_score = sum(components[key] * weight for key, weight in weights.items())
+    # Normalise weights so they always sum to 1.0 regardless of which optional
+    # components are active, then compute the weighted score.
+    total_w = sum(base_weights.values())
+    weights = {k: v / total_w for k, v in base_weights.items()}
+    weighted_score = sum(components[k] * weights[k] for k in components)
     score = int(round(_clamp(weighted_score)))
 
     if score >= 80:
-        tier = "strong_fit"
-        summary = "Strong fit right now"
+        tier, summary = "strong_fit", "Strong fit right now"
     elif score >= 65:
-        tier = "promising"
-        summary = "Promising, worth active monitoring"
+        tier, summary = "promising", "Promising, worth active monitoring"
     elif score >= 50:
-        tier = "watch"
-        summary = "Watch list candidate"
+        tier, summary = "watch", "Watch list candidate"
     else:
-        tier = "speculative"
-        summary = "Speculative; needs better signals"
+        tier, summary = "speculative", "Speculative; needs better signals"
 
     return {
         "score": score,
         "tier": tier,
         "summary": summary,
         "components": {k: int(round(v)) for k, v in components.items()},
-        "reasons": reasons[:3],
-        "version": "v2",
+        "reasons": reasons[:4],
+        "version": "v3",
     }
 
 
@@ -418,9 +460,21 @@ async def api_locations(
             raise HTTPException(400, f"Unknown type '{type}'")
 
     async with get_db() as db:
-        locations = await list_all(db, lt)
+        all_locations = await list_all(db, None)  # fetch all types for scoring context
+        commute_anchor = await get_setting(db, "commute_anchor")
+
+        nearby_locs = [
+            l for l in all_locations
+            if isinstance(l, Gym)
+            or (isinstance(l, PointOfInterest) and (
+                l.category == "grocery" or (l.weight or 0.0) >= 0.5
+            ))
+        ]
+
         result = []
-        for loc in locations:
+        for loc in all_locations:
+            if lt and loc.location_type != lt:
+                continue
             d = _loc_to_dict(loc)
             if isinstance(loc, Apartment):
                 units = await get_latest_units(db, loc.id)
@@ -428,7 +482,9 @@ async def api_locations(
                 d["units"] = [_unit_to_dict(u) for u in units]
                 d["available_count"] = sum(1 for u in units if u.available)
                 d["price_range"] = _format_price_range(unit_price_mins)
-                d["decision_insight"] = _decision_insight_for_location(loc, units)
+                d["decision_insight"] = _decision_insight_for_location(
+                    loc, units, commute_anchor, nearby_locs
+                )
                 if available and not any(u.available for u in units):
                     continue
                 if max_price is not None:
@@ -436,7 +492,9 @@ async def api_locations(
                     if prices and min(prices) > max_price:
                         continue
             else:
-                d["decision_insight"] = _decision_insight_for_location(loc)
+                d["decision_insight"] = _decision_insight_for_location(
+                    loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs
+                )
             result.append(d)
 
     return JSONResponse(result)
@@ -517,14 +575,27 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
         loc = await get_by_id(db, loc_id)
         if not loc:
             raise HTTPException(404, "Location not found")
+        commute_anchor = await get_setting(db, "commute_anchor")
+        all_locations = await list_all(db, None)
+        nearby_locs = [
+            l for l in all_locations
+            if isinstance(l, Gym)
+            or (isinstance(l, PointOfInterest) and (
+                l.category == "grocery" or (l.weight or 0.0) >= 0.5
+            ))
+        ]
         d = _loc_to_dict(loc)
         if isinstance(loc, Apartment):
             units = await get_latest_units(db, loc.id)
             d["units"] = [_unit_to_dict(u) for u in units]
             d["available_count"] = sum(1 for u in units if u.available)
-            d["decision_insight"] = _decision_insight_for_location(loc, units)
+            d["decision_insight"] = _decision_insight_for_location(
+                loc, units, commute_anchor, nearby_locs
+            )
         else:
-            d["decision_insight"] = _decision_insight_for_location(loc)
+            d["decision_insight"] = _decision_insight_for_location(
+                loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs
+            )
     return JSONResponse(d)
 
 
@@ -535,6 +606,29 @@ async def api_delete_location(loc_id: int) -> JSONResponse:
     if not deleted:
         raise HTTPException(404, "Location not found")
     return JSONResponse({"status": "deleted", "id": loc_id})
+
+
+# ── Commute anchor settings ──────────────────────────────────────────────────
+
+@app.get("/api/settings/commute-anchor")
+async def api_get_commute_anchor() -> JSONResponse:
+    async with get_db() as db:
+        anchor = await get_setting(db, "commute_anchor")
+    return JSONResponse(anchor or {})
+
+
+@app.post("/api/settings/commute-anchor")
+async def api_set_commute_anchor(payload: CommuteAnchorRequest) -> JSONResponse:
+    async with get_db() as db:
+        await set_setting(db, "commute_anchor", payload.model_dump())
+    return JSONResponse({"status": "ok"})
+
+
+@app.delete("/api/settings/commute-anchor")
+async def api_delete_commute_anchor() -> JSONResponse:
+    async with get_db() as db:
+        await delete_setting(db, "commute_anchor")
+    return JSONResponse({"status": "ok"})
 
 
 @app.post("/api/locations/{loc_id}/units/manual")
