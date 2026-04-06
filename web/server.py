@@ -343,6 +343,10 @@ def _decision_insight_for_location(loc, units: list | None = None) -> dict[str, 
             affordability_component = _clamp(100.0 - ((cheapest - 1800) / (target_budget - 1800)) * 100.0)
             components["affordability"] = affordability_component
             reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
+        elif unit_list:
+            # Units exist but all are "contact for pricing" — manual entries; treat as neutral
+            components["affordability"] = 50.0
+            reasons.append("Pricing listed as contact-only; score is neutral until prices are known")
         else:
             components["affordability"] = 40.0
             reasons.append("No recent unit pricing detected")
