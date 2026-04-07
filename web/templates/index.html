@@ -567,6 +567,62 @@
       border: none; border-radius: 5px; padding: 4px 7px; cursor: pointer; white-space: nowrap;
     }
     .commute-time-badge { font-size: .67rem; color: var(--blue); font-weight: 600; margin-top: 2px; }
+
+    /* ── Mobile tab bar (hidden on desktop) ── */
+    #mobile-tabs { display: none; }
+
+    @media (max-width: 768px) {
+      body { height: 100dvh; }
+
+      /* Header */
+      header { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+      header h1 { font-size: 1.1rem; }
+      .header-sub { display: none; }
+      .scrape-btn { font-size: 0.75rem; padding: 6px 10px; }
+      .secondary-btn { font-size: 0.75rem; padding: 6px 10px; }
+
+      /* Three panels become full-screen layers inside main */
+      main { position: relative; overflow: hidden; }
+
+      #left-panel, #map, #detail-panel {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        min-width: unset;
+        display: none;
+        border: none;
+      }
+      #left-panel.mob-active,
+      #detail-panel.mob-active { display: flex; }
+      #map.mob-active { display: block; }
+
+      /* Bottom nav */
+      #mobile-tabs {
+        display: flex;
+        flex-shrink: 0;
+        background: var(--dark);
+        border-top: 1px solid rgba(255,255,255,.12);
+      }
+      .mob-tab {
+        flex: 1;
+        padding: 12px 4px 10px;
+        font-size: 0.78rem;
+        color: var(--cream);
+        background: transparent;
+        border: none;
+        border-top: 2px solid transparent;
+        cursor: pointer;
+        opacity: 0.55;
+        transition: opacity .15s;
+        font-family: 'DM Sans', sans-serif;
+      }
+      .mob-tab.active { opacity: 1; border-top-color: var(--accent); }
+
+      /* Larger touch targets */
+      .verdict-btn { padding: 8px 14px; }
+      .filter-btn { padding: 6px 12px; font-size: 0.78rem; }
+      .panel-controls { flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -680,6 +736,11 @@
   </div>
 </main>
 
+<nav id="mobile-tabs">
+  <button class="mob-tab active" onclick="switchMobileTab('list')">📋 List</button>
+  <button class="mob-tab" onclick="switchMobileTab('map')">🗺 Map</button>
+  <button class="mob-tab" onclick="switchMobileTab('detail')">📍 Detail</button>
+</nav>
 
 <div id="add-modal" class="modal-overlay" onclick="closeAddModal(event)">
   <div class="modal-card" onclick="event.stopPropagation()">
@@ -973,6 +1034,7 @@ function selectLocation(id) {
   if (loc) {
     renderDetail(loc);
     if (markers[id]) map.panTo([loc.lat, loc.lon]);
+    if (window.innerWidth <= 768) switchMobileTab('detail');
   }
 }
 
@@ -2117,7 +2179,23 @@ async function setCommuteAnchor() {
   }
 }
 
+// ── Mobile tabs ──────────────────────────────────────────────────────────────
+function switchMobileTab(tab) {
+  const panelIds = { list: 'left-panel', map: 'map', detail: 'detail-panel' };
+  Object.values(panelIds).forEach(id =>
+    document.getElementById(id).classList.remove('mob-active')
+  );
+  document.getElementById(panelIds[tab]).classList.add('mob-active');
+  document.querySelectorAll('.mob-tab').forEach(b =>
+    b.classList.toggle('active', b.getAttribute('onclick').includes(`'${tab}'`))
+  );
+  if (tab === 'map') setTimeout(() => map.invalidateSize(), 50);
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
+if (window.innerWidth <= 768) {
+  document.getElementById('left-panel').classList.add('mob-active');
+}
 initMap();
 addAnchors();
 loadLocations();
