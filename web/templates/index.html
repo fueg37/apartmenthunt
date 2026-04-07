@@ -1036,7 +1036,7 @@ function renderCards() {
          ${loc.available_count != null ? `<div class="card-avail">${loc.available_count} unit${loc.available_count !== 1 ? 's' : ''} available</div>` : ''}`
       : '';
 
-    const decisionHtml = loc.decision_insight
+    const decisionHtml = loc.location_type === 'apartment' && loc.decision_insight
       ? `<span class="decision-chip" data-tier="${loc.decision_insight.tier}">Score ${loc.decision_insight.score}<small>${loc.decision_insight.summary}</small></span>`
       : '';
 
