@@ -24,6 +24,7 @@ from db.units import get_latest_units, save_manual_units, delete_manual_units
 from db.history import get_changes
 from db.settings import get_setting, set_setting, delete_setting
 import db.discoveries as disc_db
+import db.visits as visits_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,33 @@ class CommuteAnchorRequest(BaseModel):
     lon: float
 
 
+class CommuteAnchorItem(BaseModel):
+    id: str   # client-generated UUID
+    name: str
+    lat: float
+    lon: float
+    weight: float = 1.0
+
+
+class CommuteAnchorsRequest(BaseModel):
+    anchors: list[CommuteAnchorItem]
+
+
+class CostDetailsRequest(BaseModel):
+    parking_cost: int | None = None
+    utilities_estimate: int | None = None
+    pet_fee: int | None = None
+    amenity_fee: int | None = None
+    concession_months: int | None = None
+    lease_term_months: int | None = None
+
+
+class VisitRequest(BaseModel):
+    visit_date: str   # ISO date YYYY-MM-DD
+    impression: int | None = None  # 1-5
+    notes: str | None = None
+
+
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
@@ -335,6 +363,7 @@ def _decision_insight_for_location(
     units: list | None = None,
     commute_anchor: dict | None = None,
     nearby_locs: list | None = None,
+    commute_anchors: list | None = None,
 ) -> dict[str, Any]:
     """Compute an opinionated decision score based purely on apartment quality metrics."""
     components: dict[str, float] = {}
@@ -353,13 +382,26 @@ def _decision_insight_for_location(
     if loc.is_top_pick:
         reasons.append("Marked as a top pick")
 
-    # Commute (conditional — only when anchor is saved)
-    if commute_anchor and loc.lat and loc.lon:
-        mins = _drive_mins(loc.lat, loc.lon, commute_anchor["lat"], commute_anchor["lon"])
-        # ≤10 min = 100, 30 min = 0
-        components["commute"] = _clamp(100.0 - max(0.0, mins - 10) * 5.0)
+    # Commute — multi-anchor (commute_anchors) takes priority over single commute_anchor
+    effective_anchors: list[dict] = []
+    if commute_anchors:
+        effective_anchors = [a for a in commute_anchors if a.get("lat") and a.get("lon")]
+    elif commute_anchor and commute_anchor.get("lat") and commute_anchor.get("lon"):
+        effective_anchors = [{**commute_anchor, "weight": 1.0}]
+
+    if effective_anchors and loc.lat and loc.lon:
+        total_w = sum(a.get("weight", 1.0) for a in effective_anchors) or len(effective_anchors)
+        anchor_score_sum = 0.0
+        anchor_reason_parts: list[str] = []
+        for anchor in effective_anchors:
+            mins = _drive_mins(loc.lat, loc.lon, anchor["lat"], anchor["lon"])
+            s = _clamp(100.0 - max(0.0, mins - 10) * 5.0)
+            w = anchor.get("weight", 1.0) / total_w
+            anchor_score_sum += s * w
+            anchor_reason_parts.append(f"~{mins} min to {anchor['name']}")
+        components["commute"] = anchor_score_sum
         base_weights["commute"] = 0.20
-        reasons.append(f"~{mins} min drive to {commute_anchor['name']}")
+        reasons.append(" · ".join(anchor_reason_parts[:2]))
 
     # Proximity: nearest gym, grocery, or high-weight POI (conditional)
     if nearby_locs and loc.lat and loc.lon:
@@ -384,12 +426,30 @@ def _decision_insight_for_location(
         # Affordability (always included for apartments)
         unit_list = units or []
         priced = [u.price_min for u in unit_list if u.price_min is not None]
+        # Apply cost_details if user has filled them in
+        cost_details = loc.extra.get("cost_details", {}) if hasattr(loc, "extra") else {}
+        parking = int(cost_details.get("parking_cost") or 0)
+        utilities = int(cost_details.get("utilities_estimate") or 0)
+        pet_fee = int(cost_details.get("pet_fee") or 0)
+        amenity_fee = int(cost_details.get("amenity_fee") or 0)
+        concession_months = int(cost_details.get("concession_months") or 0)
+        lease_term = int(cost_details.get("lease_term_months") or 12) or 12
+        extras = parking + utilities + pet_fee + amenity_fee
+
         if priced:
             cheapest = min(priced)
-            target_budget = 3500
-            ratio = (cheapest - 1800) / (target_budget - 1800)
+            # Compute true monthly cost if extras are filled in
+            true_monthly = cheapest + extras
+            if concession_months > 0:
+                true_monthly -= int(cheapest * concession_months / lease_term)
+            true_monthly = max(0, true_monthly)
+            target_budget = 3500 + extras  # scale budget to match true cost
+            ratio = (true_monthly - 1800) / max(1, target_budget - 1800)
             components["affordability"] = _clamp((1.0 - math.sqrt(max(0.0, ratio))) * 100.0)
-            reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
+            if extras:
+                reasons.append(f"All-in ~${true_monthly:,}/mo (rent ${cheapest:,} + extras)")
+            else:
+                reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
         elif unit_list:
             components["affordability"] = 50.0
             reasons.append("Pricing listed as contact-only")
@@ -470,6 +530,7 @@ async def api_locations(
     async with get_db() as db:
         all_locations = await list_all(db, None)  # fetch all types for scoring context
         commute_anchor = await get_setting(db, "commute_anchor")
+        commute_anchors_setting = await get_setting(db, "commute_anchors")
 
         nearby_locs = [
             l for l in all_locations
@@ -491,7 +552,8 @@ async def api_locations(
                 d["available_count"] = sum(1 for u in units if u.available)
                 d["price_range"] = _format_price_range(unit_price_mins)
                 d["decision_insight"] = _decision_insight_for_location(
-                    loc, units, commute_anchor, nearby_locs
+                    loc, units, commute_anchor, nearby_locs,
+                    commute_anchors=commute_anchors_setting,
                 )
                 if available and not any(u.available for u in units):
                     continue
@@ -501,7 +563,8 @@ async def api_locations(
                         continue
             else:
                 d["decision_insight"] = _decision_insight_for_location(
-                    loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs
+                    loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs,
+                    commute_anchors=commute_anchors_setting,
                 )
             result.append(d)
 
@@ -584,6 +647,7 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
         if not loc:
             raise HTTPException(404, "Location not found")
         commute_anchor = await get_setting(db, "commute_anchor")
+        commute_anchors_setting = await get_setting(db, "commute_anchors")
         all_locations = await list_all(db, None)
         nearby_locs = [
             l for l in all_locations
@@ -598,11 +662,13 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
             d["units"] = [_unit_to_dict(u) for u in units]
             d["available_count"] = sum(1 for u in units if u.available)
             d["decision_insight"] = _decision_insight_for_location(
-                loc, units, commute_anchor, nearby_locs
+                loc, units, commute_anchor, nearby_locs,
+                commute_anchors=commute_anchors_setting,
             )
         else:
             d["decision_insight"] = _decision_insight_for_location(
-                loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs
+                loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs,
+                commute_anchors=commute_anchors_setting,
             )
     return JSONResponse(d)
 
@@ -637,6 +703,117 @@ async def api_delete_commute_anchor() -> JSONResponse:
     async with get_db() as db:
         await delete_setting(db, "commute_anchor")
     return JSONResponse({"status": "ok"})
+
+
+# ── Multi-anchor commute settings ────────────────────────────────────────────
+
+@app.get("/api/settings/commute-anchors")
+async def api_get_commute_anchors() -> JSONResponse:
+    async with get_db() as db:
+        anchors = await get_setting(db, "commute_anchors")
+    return JSONResponse(anchors or [])
+
+
+@app.post("/api/settings/commute-anchors")
+async def api_set_commute_anchors(payload: CommuteAnchorsRequest) -> JSONResponse:
+    anchors = [a.model_dump() for a in payload.anchors]
+    async with get_db() as db:
+        await set_setting(db, "commute_anchors", anchors)
+    return JSONResponse({"status": "ok", "count": len(anchors)})
+
+
+@app.delete("/api/settings/commute-anchors/{anchor_id}")
+async def api_delete_commute_anchor_by_id(anchor_id: str) -> JSONResponse:
+    async with get_db() as db:
+        anchors = await get_setting(db, "commute_anchors") or []
+        anchors = [a for a in anchors if a.get("id") != anchor_id]
+        await set_setting(db, "commute_anchors", anchors)
+    return JSONResponse({"status": "ok"})
+
+
+# ── Cost details ──────────────────────────────────────────────────────────────
+
+@app.patch("/api/locations/{loc_id}/cost-details")
+async def api_update_cost_details(loc_id: int, payload: CostDetailsRequest) -> JSONResponse:
+    """Save true monthly cost breakdown fields for an apartment."""
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    async with get_db() as db:
+        cur = await db.execute("SELECT extra_json FROM locations WHERE id=?", (loc_id,))
+        row = await cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Location not found")
+        extra = json.loads(row["extra_json"] or "{}")
+        existing_cost = extra.get("cost_details", {})
+        existing_cost.update(updates)
+        extra["cost_details"] = existing_cost
+        await db.execute(
+            "UPDATE locations SET extra_json=? WHERE id=?",
+            (json.dumps(extra), loc_id),
+        )
+        await db.commit()
+    return JSONResponse({"cost_details": existing_cost})
+
+
+# ── Visit log ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/locations/{loc_id}/visits")
+async def api_get_visits(loc_id: int) -> JSONResponse:
+    async with get_db() as db:
+        loc = await get_by_id(db, loc_id)
+        if not loc:
+            raise HTTPException(404, "Location not found")
+        visits = await visits_db.get_visits(db, loc_id)
+    return JSONResponse(visits)
+
+
+@app.post("/api/locations/{loc_id}/visits")
+async def api_add_visit(loc_id: int, payload: VisitRequest) -> JSONResponse:
+    async with get_db() as db:
+        loc = await get_by_id(db, loc_id)
+        if not loc:
+            raise HTTPException(404, "Location not found")
+        visit_id = await visits_db.add_visit(
+            db, loc_id, payload.visit_date, payload.impression, payload.notes
+        )
+        visits = await visits_db.get_visits(db, loc_id)
+    return JSONResponse(visits, status_code=201)
+
+
+@app.delete("/api/visits/{visit_id}")
+async def api_delete_visit(visit_id: int) -> JSONResponse:
+    async with get_db() as db:
+        deleted = await visits_db.delete_visit(db, visit_id)
+    if not deleted:
+        raise HTTPException(404, "Visit not found")
+    return JSONResponse({"status": "deleted"})
+
+
+# ── ISP availability ──────────────────────────────────────────────────────────
+
+@app.post("/api/locations/{loc_id}/fetch-isp")
+async def api_fetch_isp(loc_id: int) -> JSONResponse:
+    """Fetch FCC broadband availability data for a location's coordinates."""
+    from scrapers.isp import fetch_isp_availability
+    from datetime import date as _date
+
+    async with get_db() as db:
+        loc = await get_by_id(db, loc_id)
+        if not loc:
+            raise HTTPException(404, "Location not found")
+        if not loc.lat or not loc.lon:
+            raise HTTPException(400, "Location has no coordinates")
+
+        try:
+            isp_result = await fetch_isp_availability(loc.lat, loc.lon)
+        except RuntimeError as e:
+            raise HTTPException(502, str(e))
+
+        isp_result["fetched_at"] = _date.today().isoformat()
+        ok = await _patch_extra_json(db, loc_id, {"isp_data": isp_result})
+        if not ok:
+            raise HTTPException(500, "Failed to save ISP data")
+
+    return JSONResponse(isp_result)
 
 
 @app.post("/api/locations/{loc_id}/units/manual")
@@ -1060,6 +1237,8 @@ def _loc_to_dict(loc) -> dict[str, Any]:
     data["cons"] = loc.extra.get("cons", [])
     data["verdict"] = loc.extra.get("verdict", "neutral")
     data["subtype"] = loc.extra.get("subtype", "apartment")
+    data["cost_details"] = loc.extra.get("cost_details", {})
+    data["isp_data"] = loc.extra.get("isp_data", None)
     return data
 
 

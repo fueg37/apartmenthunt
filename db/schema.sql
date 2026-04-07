@@ -62,6 +62,17 @@ CREATE TABLE IF NOT EXISTS settings (
     value  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS visits (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    visit_date  TEXT NOT NULL,
+    impression  INTEGER,
+    notes       TEXT,
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_visits_location ON visits(location_id, visit_date DESC);
+
 CREATE TABLE IF NOT EXISTS discoveries (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     name           TEXT    NOT NULL,
