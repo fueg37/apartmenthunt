@@ -162,9 +162,14 @@
       border: 1px solid #e3ca94;
     }
     .decision-chip small { font-weight: 600; opacity: .82; }
+    .decision-chip[data-tier="strong_fit"] { background: #d6f0e0; color: #2a6a45; border-color: #a0d8b8; }
+    .decision-chip[data-tier="promising"]  { background: #fdf0c8; color: #7a5a10; border-color: #e8d080; }
+    .decision-chip[data-tier="watch"]      { background: #fde8d0; color: #7a4020; border-color: #e8b080; }
+    .decision-chip[data-tier="speculative"]{ background: #f3e7cd; color: #5f4417; border-color: #e3ca94; }
     .detail-score-box {
       background: #fdf6e8;
       border: 1px solid #ead5af;
+      border-left-width: 4px;
       border-radius: 8px;
       padding: 8px 10px;
       margin-bottom: 10px;
@@ -172,9 +177,35 @@
       flex-direction: column;
       gap: 4px;
     }
+    .detail-score-box[data-tier="strong_fit"] { border-left-color: #5aad7a; }
+    .detail-score-box[data-tier="promising"]  { border-left-color: #e8b840; }
+    .detail-score-box[data-tier="watch"]      { border-left-color: #e07840; }
+    .detail-score-box[data-tier="speculative"]{ border-left-color: #c06050; }
     .detail-score-title { font-size: .72rem; color: var(--bark); text-transform: uppercase; letter-spacing: .6px; }
     .detail-score-line { font-size: .82rem; }
     .detail-score-reasons { font-size: .75rem; color: var(--bark); margin-top: 1px; }
+    .score-breakdown { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .score-comp-pill {
+      font-size: .64rem; padding: 2px 7px; border-radius: 9px;
+      background: rgba(0,0,0,.06); color: var(--bark);
+    }
+    .score-comp-pill b { color: var(--dark); }
+    /* Detail header row (name + action buttons) */
+    .detail-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .detail-header-row .detail-name { margin-bottom: 0; flex: 1; }
+    .detail-header-actions { display: flex; gap: 4px; flex-shrink: 0; padding-top: 4px; }
+    .top-pick-star-btn {
+      background: none; border: 1.5px solid #d4c8b4; border-radius: 7px;
+      font-size: 1rem; padding: 2px 6px; cursor: pointer; transition: all .15s; line-height: 1.4;
+    }
+    .top-pick-star-btn:hover { border-color: var(--gold); background: #fff8ec; }
+    .top-pick-star-btn.active { border-color: var(--gold); background: #fff8ec; }
+    /* Shortlisted card highlight */
+    .card.shortlisted { border-left: 3px solid #5aad7a !important; }
+    /* POI category row in detail panel */
+    .poi-category-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .poi-category-row label { font-size: .72rem; color: var(--bark); white-space: nowrap; }
+    .poi-category-row select { font-size: .78rem; border: 1px solid #ccbca3; border-radius: 6px; padding: 4px 7px; background: #fff; }
 
     /* ── Map ── */
     #map { flex: 1; }
@@ -189,6 +220,14 @@
       flex-direction: column;
       overflow: hidden;
       flex-shrink: 0;
+      position: relative;
+    }
+    #detail-resize-handle {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+      cursor: col-resize; z-index: 10; transition: background .15s;
+    }
+    #detail-resize-handle:hover, #detail-resize-handle.dragging {
+      background: rgba(122,106,84,.18);
     }
     #detail-inner {
       flex: 1;
@@ -673,8 +712,12 @@
 
   <!-- Right: detail panel -->
   <div id="detail-panel">
+    <div id="detail-resize-handle"></div>
     <div id="detail-inner">
-      <div class="detail-empty">Click a card or map marker to see details.</div>
+      <div class="detail-empty" style="flex-direction:column">
+        <div style="font-size:2rem;margin-bottom:8px;opacity:.3">🏠</div>
+        <div>Select a location to see details</div>
+      </div>
     </div>
     <div id="changes-bar">Loading recent changes…</div>
   </div>
@@ -726,7 +769,20 @@
         <div class="field full type-gym"><label>Equipment highlights (| separated)</label><input name="equipment_highlights_text" placeholder="Power racks | 24/7 access" /></div>
         <div class="field full type-hospital"><label>Health system</label><input name="health_system" /></div>
 
-        <div class="field full type-poi"><label>POI Category</label><input name="category" placeholder="e.g., grocery, coworking, park" /></div>
+        <div class="field full type-poi"><label>POI Category</label>
+          <select name="category">
+            <option value="">— Select category —</option>
+            <option value="grocery">🛒 Grocery</option>
+            <option value="beach">🏖 Beach / Waterfront</option>
+            <option value="park">🌿 Park / Nature</option>
+            <option value="pharmacy">💊 Pharmacy</option>
+            <option value="restaurant">🍽 Restaurant / Food</option>
+            <option value="retail">🛍 Retail / Shopping</option>
+            <option value="coworking">💻 Coworking</option>
+            <option value="library">📚 Library</option>
+            <option value="other">📍 Other</option>
+          </select>
+        </div>
       </div>
       <div class="form-note">Tip: paste a URL and click Auto-fill — name, address, and coordinates are populated automatically. For apartments, add floor plans manually to skip auto-scraping, or leave empty to scrape automatically.</div>
       <div class="modal-actions">
@@ -769,6 +825,14 @@ const AMENITY_LABELS = {
   balcony: 'Balcony', ev_charging: 'EV Charging', storage: 'Storage', furnished: 'Furnished',
 };
 const ALL_AMENITIES = Object.keys(AMENITY_LABELS);
+const POI_CATEGORY_EMOJI = {
+  grocery: '🛒', beach: '🏖', park: '🌿', pharmacy: '💊',
+  restaurant: '🍽', retail: '🛍', coworking: '💻', library: '📚', other: '📍',
+};
+const POI_CATEGORY_LABEL = {
+  grocery: 'Grocery', beach: 'Beach', park: 'Park', pharmacy: 'Pharmacy',
+  restaurant: 'Restaurant', retail: 'Retail', coworking: 'Coworking', library: 'Library', other: 'POI',
+};
 
 // ── Map init ────────────────────────────────────────────────────────────────
 function initMap() {
@@ -878,7 +942,7 @@ function renderCards() {
   list.innerHTML = '';
   locs.forEach(loc => {
     const card = document.createElement('div');
-    card.className = 'card' + (loc.id === activeId ? ' active' : '');
+    card.className = 'card' + (loc.id === activeId ? ' active' : '') + (loc.verdict === 'up' ? ' shortlisted' : '');
     card.dataset.id = loc.id;
     card.onclick = () => selectLocation(loc.id);
 
@@ -888,7 +952,7 @@ function renderCards() {
       : '';
 
     const decisionHtml = loc.decision_insight
-      ? `<span class="decision-chip">Score ${loc.decision_insight.score}<small>${loc.decision_insight.summary}</small></span>`
+      ? `<span class="decision-chip" data-tier="${loc.decision_insight.tier}">Score ${loc.decision_insight.score}<small>${loc.decision_insight.summary}</small></span>`
       : '';
 
     // Amenity pills (top 4)
@@ -927,12 +991,15 @@ function renderCards() {
     const subtypeLabel = { apartment: 'Apt', townhome: 'Townhome', condo: 'Condo', studio: 'Studio' };
     const subtypeBadge = loc.location_type === 'apartment' && loc.subtype && loc.subtype !== 'apartment'
       ? `<span class="badge badge-subtype">${subtypeLabel[loc.subtype] || loc.subtype}</span>` : '';
+    const poiCategoryLabel = loc.location_type === 'poi' && loc.category
+      ? `<span class="card-area" style="margin-top:3px">${POI_CATEGORY_EMOJI[loc.category] || '📍'} ${POI_CATEGORY_LABEL[loc.category] || loc.category}</span>` : '';
 
     card.innerHTML = `
       ${loc.is_top_pick ? `<div class="card-top-icon" style="${starStyle}">⭐</div>` : ''}
       ${compareHtml}
       <div class="card-name" style="padding-right:${loc.is_top_pick ? '52px' : loc.location_type === 'apartment' ? '26px' : '8px'}">${loc.name}</div>
       <div class="card-area">${areaFromAddress(loc.address)}</div>
+      ${poiCategoryLabel}
       <div class="card-meta">
         <span class="badge ${BADGE_CLASS[loc.location_type]}">${TYPE_LABEL[loc.location_type]}</span>
         ${subtypeBadge}
@@ -1038,12 +1105,47 @@ function renderDetail(loc) {
       </div>`;
   }
 
+  // Score component breakdown
+  const COMP_LABELS = {
+    affordability: 'Afford', rating: 'Rating', amenities: 'Amenities',
+    commute: 'Commute', proximity: 'Proximity', priority_signal: 'Priority', type_fit: 'Type fit',
+  };
+  const breakdownHtml = decision?.components
+    ? `<div class="score-breakdown">${Object.entries(decision.components)
+        .map(([k,v]) => `<span class="score-comp-pill">${COMP_LABELS[k]||k} <b>${v}</b></span>`)
+        .join('')}</div>`
+    : '';
+
+  // POI category edit
+  const poiCats = ['grocery','beach','park','pharmacy','restaurant','retail','coworking','library','other'];
+  const poiCategoryHtml = loc.location_type === 'poi' ? `
+    <div class="poi-category-row">
+      <label>Category</label>
+      <select onchange="savePOICategory(${loc.id}, this.value)">
+        <option value="">— none —</option>
+        ${poiCats.map(c => `<option value="${c}" ${loc.category === c ? 'selected' : ''}>${POI_CATEGORY_EMOJI[c]} ${POI_CATEGORY_LABEL[c]}</option>`).join('')}
+      </select>
+    </div>` : '';
+
   panel.innerHTML = `
-    <div class="detail-name">${loc.name}</div>
+    <div class="detail-header-row">
+      <div class="detail-name">${loc.name}</div>
+      <div class="detail-header-actions">
+        ${loc.location_type === 'apartment' ? `
+          <button class="verdict-btn ${(loc.verdict||'neutral') === 'up' ? 'up' : ''}"
+            onclick="setVerdict(${loc.id},'up')" title="Shortlist">👍</button>
+          <button class="verdict-btn ${(loc.verdict||'neutral') === 'down' ? 'down' : ''}"
+            onclick="setVerdict(${loc.id},'down')" title="Pass">👎</button>` : ''}
+        <button class="top-pick-star-btn${loc.is_top_pick ? ' active' : ''}"
+          onclick="toggleTopPick(${loc.id})"
+          title="${loc.is_top_pick ? 'Remove top pick' : 'Mark as top pick'}">${loc.is_top_pick ? '⭐' : '☆'}</button>
+      </div>
+    </div>
     <div class="detail-address">${loc.address}</div>
-    ${decision ? `<div class="detail-score-box">
+    ${decision ? `<div class="detail-score-box" data-tier="${decision.tier}">
       <div class="detail-score-title">Decision Score · ${decision.version}</div>
       <div class="detail-score-line"><strong>${decision.score}</strong>/100 · ${decision.summary}</div>
+      ${breakdownHtml}
       ${decision.reasons?.length ? `<div class="detail-score-reasons">${decision.reasons.join(' · ')}</div>` : ''}
     </div>` : ''}
     <div class="detail-badges">
@@ -1057,6 +1159,7 @@ function renderDetail(loc) {
           <option value="studio"     ${(loc.subtype||'')==='studio'    ? 'selected':''}>Studio</option>
         </select>` : ''}
     </div>
+    ${poiCategoryHtml}
     <div class="detail-rating">
       ${loc.rating ? `⭐ <strong>${loc.rating.toFixed(1)}</strong>` : ''}
       ${loc.review_count ? ` · ${loc.review_count.toLocaleString()} reviews` : ''}
@@ -1113,17 +1216,17 @@ function buildProximity(loc) {
       ...nearestN(loc, pois.filter(l => l.category === 'beach'), 1),
       ...nearestN(loc, pois.filter(l => l.category === 'park'), 1),
       ...nearestN(loc, pois.filter(l => l.category === 'pharmacy'), 1),
-      ...nearestN(loc, pois.filter(l => l.category === 'general_retail'), 1),
+      ...nearestN(loc, pois.filter(l => l.category === 'retail' || l.category === 'general_retail'), 1),
+      ...nearestN(loc, pois.filter(l => l.category === 'restaurant'), 1),
     ];
   } else {
     relevant = nearestN(loc, others.filter(l => l.location_type === 'apartment'), 3);
   }
   if (!relevant.length) return '';
-  const poiIcon = { grocery: '🛒', beach: '🏖️', park: '🌿', pharmacy: '💊', general_retail: '🎯' };
   return `<div class="section-title">Proximity</div>` +
     relevant.map(({ other, mins }) => {
       const icon = other.location_type === 'poi'
-        ? (poiIcon[other.category] ?? '📍')
+        ? (POI_CATEGORY_EMOJI[other.category] ?? (other.category === 'general_retail' ? '🛍' : '📍'))
         : (other.location_type === 'gym' ? '🏋️' : other.location_type === 'hospital' ? '🏥' : '');
       return `
       <div class="proximity-item" onclick="selectLocation(${other.id})">
@@ -2115,6 +2218,64 @@ async function setCommuteAnchor() {
     alert(`Could not geocode "${q}". Try a more specific address.`);
     input.style.color = 'var(--coral)';
   }
+}
+
+// ── Panel resize ─────────────────────────────────────────────────────────────
+(function initPanelResize() {
+  const panel = document.getElementById('detail-panel');
+  const handle = document.getElementById('detail-resize-handle');
+  const MIN = 360, MAX = 700, KEY = 'detail_panel_width';
+  const saved = parseInt(localStorage.getItem(KEY));
+  if (saved >= MIN && saved <= MAX) panel.style.width = saved + 'px';
+  let startX, startW;
+  handle.addEventListener('mousedown', e => {
+    startX = e.clientX; startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+  function onMove(e) {
+    panel.style.width = Math.min(MAX, Math.max(MIN, startW - (e.clientX - startX))) + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    localStorage.setItem(KEY, panel.offsetWidth);
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
+// ── Top pick toggle ───────────────────────────────────────────────────────────
+async function toggleTopPick(id) {
+  const loc = allLocations.find(l => l.id === id);
+  if (!loc) return;
+  const newVal = !loc.is_top_pick;
+  try {
+    await fetch(`/api/locations/${id}/top-pick`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_top_pick: newVal }),
+    });
+    loc.is_top_pick = newVal;
+    renderCards();
+    renderDetail(loc);
+  } catch (e) { console.error('toggleTopPick failed:', e); }
+}
+
+// ── POI category save ─────────────────────────────────────────────────────────
+async function savePOICategory(id, category) {
+  try {
+    await fetch(`/api/locations/${id}/poi-category`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category }),
+    });
+    const loc = allLocations.find(l => l.id === id);
+    if (loc) { loc.category = category || null; renderCards(); }
+  } catch (e) { console.error('savePOICategory failed:', e); }
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
