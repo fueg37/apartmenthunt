@@ -293,6 +293,10 @@ class VisitRequest(BaseModel):
     notes: str | None = None
 
 
+class ISPNotesRequest(BaseModel):
+    notes: str  # free text, e.g. "AT&T Fiber 1Gbps - $80/mo"
+
+
 class LocationCreateRequest(BaseModel):
     name: str
     address: str
@@ -788,32 +792,16 @@ async def api_delete_visit(visit_id: int) -> JSONResponse:
     return JSONResponse({"status": "deleted"})
 
 
-# ── ISP availability ──────────────────────────────────────────────────────────
+# ── ISP notes (manual entry; FCC API requires auth so we link to the map) ────
 
-@app.post("/api/locations/{loc_id}/fetch-isp")
-async def api_fetch_isp(loc_id: int) -> JSONResponse:
-    """Fetch FCC broadband availability data for a location's coordinates."""
-    from scrapers.isp import fetch_isp_availability
-    from datetime import date as _date
-
+@app.patch("/api/locations/{loc_id}/isp-notes")
+async def api_update_isp_notes(loc_id: int, payload: ISPNotesRequest) -> JSONResponse:
+    """Save free-text ISP availability notes for a location."""
     async with get_db() as db:
-        loc = await get_by_id(db, loc_id)
-        if not loc:
-            raise HTTPException(404, "Location not found")
-        if not loc.lat or not loc.lon:
-            raise HTTPException(400, "Location has no coordinates")
-
-        try:
-            isp_result = await fetch_isp_availability(loc.lat, loc.lon)
-        except RuntimeError as e:
-            raise HTTPException(502, str(e))
-
-        isp_result["fetched_at"] = _date.today().isoformat()
-        ok = await _patch_extra_json(db, loc_id, {"isp_data": isp_result})
-        if not ok:
-            raise HTTPException(500, "Failed to save ISP data")
-
-    return JSONResponse(isp_result)
+        ok = await _patch_extra_json(db, loc_id, {"isp_notes": payload.notes})
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"isp_notes": payload.notes})
 
 
 @app.post("/api/locations/{loc_id}/units/manual")
@@ -1238,7 +1226,7 @@ def _loc_to_dict(loc) -> dict[str, Any]:
     data["verdict"] = loc.extra.get("verdict", "neutral")
     data["subtype"] = loc.extra.get("subtype", "apartment")
     data["cost_details"] = loc.extra.get("cost_details", {})
-    data["isp_data"] = loc.extra.get("isp_data", None)
+    data["isp_notes"] = loc.extra.get("isp_notes", "")
     return data
 
 
