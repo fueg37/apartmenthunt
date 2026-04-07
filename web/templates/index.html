@@ -1622,50 +1622,59 @@ async function deleteVisit(visitId, locId) {
   } catch (_) {}
 }
 
-// ── ISP section ───────────────────────────────────────────────────────────────
+// ── ISP section (FCC map link + manual notes) ────────────────────────────────
 function buildISPSection(loc) {
   if (loc.location_type !== 'apartment') return '';
-  const isp = loc.isp_data;
-  let badge = '';
-  if (isp) {
-    if (isp.has_fiber) {
-      const fiberP = isp.providers.find(p => p.type === 'fiber');
-      badge = `<span class="isp-badge fiber">⚡ Fiber ${fiberP ? fiberP.down + ' Mbps' : ''}</span>`;
-    } else if (isp.providers && isp.providers.length) {
-      const best = isp.providers[0];
-      badge = `<span class="isp-badge cable">📡 ${best.name} · ${best.down} Mbps</span>`;
-    } else {
-      badge = `<span class="isp-badge none">⚠ No broadband found</span>`;
-    }
-  }
-  const fetched = isp?.fetched_at ? ` · checked ${isp.fetched_at}` : '';
+  const notes = loc.isp_notes || '';
+  const hasFiber = /fiber|fios|google fiber/i.test(notes);
+  const badge = notes
+    ? `<span class="isp-badge ${hasFiber ? 'fiber' : 'cable'}">${hasFiber ? '⚡' : '📡'} ${escHtml(notes.length > 45 ? notes.slice(0, 45) + '…' : notes)}</span>`
+    : `<span style="font-size:.7rem;color:var(--bark);font-style:italic">Not recorded yet</span>`;
+  const fccUrl = `https://broadbandmap.fcc.gov/home?location_id=&addr=&city=&state=FL&zip=&lat=${loc.lat}&lon=${loc.lon}&zoom=14`;
   return `<div class="isp-section">
     <span class="section-title" style="margin:0">Internet</span>
     ${badge}
-    <button class="isp-check-btn" onclick="checkISP(${loc.id})" id="isp-btn-${loc.id}">
-      ${isp ? '↺ Refresh' : 'Check'}
-    </button>
-    ${fetched ? `<span style="font-size:.62rem;color:#aaa">${fetched}</span>` : ''}
+    <a href="${fccUrl}" target="_blank" rel="noopener" class="isp-check-btn" style="text-decoration:none">🗺 FCC Map</a>
+    <button class="isp-check-btn" onclick="openISPNotes(${loc.id})">✏ Notes</button>
+    <div id="isp-form-${loc.id}" style="display:none;width:100%;margin-top:5px">
+      <input type="text" id="isp-notes-${loc.id}"
+        placeholder="e.g. AT&T Fiber 1Gbps · Comcast 400Mbps"
+        value="${escHtml(notes)}"
+        style="width:100%;font-size:.73rem;border:1px solid #ccbca3;border-radius:5px;padding:4px 6px;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')saveISPNotes(${loc.id})" />
+      <div style="display:flex;gap:4px;margin-top:3px">
+        <button onclick="saveISPNotes(${loc.id})"
+          style="flex:1;font-size:.68rem;padding:3px;border:none;border-radius:4px;background:var(--teal);color:#fff;cursor:pointer">Save</button>
+        <button onclick="closeISPNotes(${loc.id})"
+          style="flex:1;font-size:.68rem;padding:3px;border:none;border-radius:4px;background:#ccc;color:#333;cursor:pointer">Cancel</button>
+      </div>
+    </div>
   </div>`;
 }
 
-async function checkISP(locId) {
-  const btn = document.getElementById(`isp-btn-${locId}`);
-  if (btn) { btn.textContent = '…'; btn.disabled = true; }
+function openISPNotes(locId) {
+  const el = document.getElementById(`isp-form-${locId}`);
+  if (el) { el.style.display = 'block'; document.getElementById(`isp-notes-${locId}`)?.focus(); }
+}
+function closeISPNotes(locId) {
+  const el = document.getElementById(`isp-form-${locId}`);
+  if (el) el.style.display = 'none';
+}
+async function saveISPNotes(locId) {
+  const input = document.getElementById(`isp-notes-${locId}`);
+  if (!input) return;
+  const notes = input.value.trim();
   try {
-    const res = await fetch(`/api/locations/${locId}/fetch-isp`, { method: 'POST' });
-    if (!res.ok) {
-      const err = await res.json();
-      alert(`ISP lookup failed: ${err.detail || 'unknown error'}`);
-      return;
-    }
+    await fetch(`/api/locations/${locId}/isp-notes`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
     await loadLocations();
     const loc = allLocations.find(l => l.id === locId);
     if (loc) renderDetail(loc);
-  } catch (e) {
-    alert('ISP check failed');
-  } finally {
-    if (btn) { btn.disabled = false; }
+  } catch (_) {
+    alert('Failed to save ISP notes');
   }
 }
 
@@ -2532,13 +2541,15 @@ function renderCompareTable(apts) {
     {
       label: 'Internet',
       values: apts.map(a => {
-        const isp = a.isp_data;
-        if (!isp) return '—';
-        if (isp.has_fiber) return `⚡ Fiber ${isp.best_down_mbps}Mbps`;
-        if (isp.providers && isp.providers.length) return `📡 ${isp.providers[0].name} ${isp.best_down_mbps}Mbps`;
-        return '⚠ No broadband';
+        const notes = a.isp_notes || '';
+        if (!notes) return '—';
+        const hasFiber = /fiber|fios|google fiber/i.test(notes);
+        return hasFiber ? `⚡ ${escHtml(notes)}` : `📡 ${escHtml(notes)}`;
       }),
-      classes: markBestWorst(apts.map(a => a.isp_data?.best_down_mbps ?? null)),
+      classes: apts.map(a => {
+        const notes = a.isp_notes || '';
+        return /fiber|fios/i.test(notes) ? 'best' : '';
+      }),
     },
     {
       label: 'Verdict',
