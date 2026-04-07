@@ -1162,8 +1162,17 @@ function renderDetail(loc) {
     </div>
     ${poiCategoryHtml}
     <div class="detail-rating">
-      ${loc.rating ? `⭐ <strong>${loc.rating.toFixed(1)}</strong>` : ''}
-      ${loc.review_count ? ` · ${loc.review_count.toLocaleString()} reviews` : ''}
+      ${loc.rating
+        ? `⭐ <strong>${loc.rating.toFixed(1)}</strong>${loc.review_count ? ` · ${loc.review_count.toLocaleString()} reviews` : ''}`
+        : `<span style="color:var(--bark);font-size:.75rem;font-style:italic">No rating set</span>`}
+      <button class="tiny-btn" style="margin-left:6px" onclick="showRatingEditor(${loc.id})">✏</button>
+    </div>
+    <div id="rating-editor-${loc.id}" style="display:none;margin-top:4px;gap:4px;align-items:center;font-size:.8rem">
+      <input type="number" id="rating-val-${loc.id}" step="0.1" min="0" max="5"
+        placeholder="e.g. 4.2" value="${loc.rating || ''}" style="width:70px;padding:3px 6px;border:1px solid var(--bark);border-radius:5px;font-size:.8rem">
+      <input type="number" id="rating-ct-${loc.id}" min="0" placeholder="# reviews"
+        value="${loc.review_count || ''}" style="width:90px;padding:3px 6px;border:1px solid var(--bark);border-radius:5px;font-size:.8rem">
+      <button class="tiny-btn" onclick="saveRating(${loc.id})">Save</button>
     </div>
     ${loc.notes ? `<div class="detail-notes">${loc.notes}</div>` : ''}
     ${prosConsHtml}
@@ -2277,6 +2286,41 @@ async function savePOICategory(id, category) {
     const loc = allLocations.find(l => l.id === id);
     if (loc) { loc.category = category || null; renderCards(); }
   } catch (e) { console.error('savePOICategory failed:', e); }
+}
+
+// ── Rating editor ─────────────────────────────────────────────────────────────
+function showRatingEditor(id) {
+  const el = document.getElementById(`rating-editor-${id}`);
+  if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+async function saveRating(id) {
+  try {
+    const ratingInput = document.getElementById(`rating-val-${id}`);
+    const countInput  = document.getElementById(`rating-ct-${id}`);
+    const rating      = parseFloat(ratingInput.value) || null;
+    const reviewCount = parseInt(countInput.value)    || null;
+    await fetch(`/api/locations/${id}/rating`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating, review_count: reviewCount }),
+    });
+    // Re-fetch all locations so decision_insight is recalculated with the new rating
+    const resp = await fetch('/api/locations');
+    const all  = await resp.json();
+    const updated = all.find(l => l.id === id);
+    if (updated) {
+      const loc = allLocations.find(l => l.id === id);
+      if (loc) {
+        loc.rating = updated.rating;
+        loc.review_count = updated.review_count;
+        loc.decision_insight = updated.decision_insight;
+      }
+    }
+    renderCards();
+    const loc = allLocations.find(l => l.id === id);
+    if (loc && activeId === id) renderDetail(loc);
+  } catch (e) { console.error('saveRating failed:', e); }
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
