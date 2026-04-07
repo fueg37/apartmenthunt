@@ -594,17 +594,68 @@
       padding: 4px 6px; background: #fff; cursor: pointer; color: var(--dark);
     }
 
-    /* ── Commute anchor ── */
-    .commute-row { display: flex; align-items: center; gap: 4px; width: 100%; margin-top: 4px; }
-    .commute-row label { font-size: .7rem; color: var(--bark); white-space: nowrap; }
-    .commute-row input {
-      flex: 1; font-size: .72rem; border: 1px solid var(--bark);
-      border-radius: 6px; padding: 3px 6px; background: var(--cream); min-width: 0;
-    }
-    .commute-row button {
-      font-size: .68rem; background: var(--bark); color: var(--cream);
-      border: none; border-radius: 5px; padding: 4px 7px; cursor: pointer; white-space: nowrap;
-    }
+    /* ── Commute anchors (multi) ── */
+    .commute-section { width: 100%; margin-top: 4px; }
+    .commute-section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+    .commute-section-hdr label { font-size: .7rem; color: var(--bark); font-weight: 600; }
+    .commute-section-hdr button { font-size: .65rem; background: var(--bark); color: var(--cream); border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; }
+    .anchor-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 3px; }
+    .anchor-item { display: flex; align-items: center; gap: 5px; font-size: .72rem; background: var(--sand); border-radius: 5px; padding: 3px 6px; }
+    .anchor-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .anchor-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .anchor-weight { font-size: .62rem; color: var(--bark); white-space: nowrap; }
+    .anchor-remove { background: none; border: none; cursor: pointer; color: #a08060; font-size: .78rem; padding: 0 2px; line-height: 1; }
+    .add-anchor-form { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; padding: 6px; background: var(--sand); border-radius: 6px; }
+    .add-anchor-form input { font-size: .72rem; border: 1px solid #ccbca3; border-radius: 5px; padding: 3px 6px; background: var(--cream); }
+    .add-anchor-form-row { display: flex; gap: 4px; }
+    .add-anchor-form-row input[type=range] { flex: 1; }
+    .add-anchor-form-row span { font-size: .68rem; color: var(--bark); white-space: nowrap; }
+    .add-anchor-form-actions { display: flex; gap: 4px; }
+    .add-anchor-form-actions button { font-size: .68rem; padding: 3px 7px; border: none; border-radius: 4px; cursor: pointer; }
+    .add-anchor-form-actions .btn-add { background: var(--teal); color: #fff; }
+    .add-anchor-form-actions .btn-cancel { background: #ccc; color: #333; }
+
+    /* ── True monthly cost section ── */
+    .cost-section { margin: 10px 0; background: var(--sand); border-radius: 8px; padding: 8px 10px; }
+    .cost-section-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .cost-section-hdr .true-monthly { font-size: .9rem; font-weight: 700; color: var(--teal); }
+    .cost-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+    .cost-field { display: flex; flex-direction: column; gap: 1px; }
+    .cost-field label { font-size: .62rem; color: var(--bark); }
+    .cost-field input { font-size: .75rem; border: 1px solid #ccbca3; border-radius: 5px; padding: 3px 6px; width: 100%; box-sizing: border-box; }
+    .cost-save-btn { margin-top: 6px; width: 100%; font-size: .72rem; padding: 4px; border: none; border-radius: 5px; background: var(--bark); color: var(--cream); cursor: pointer; }
+
+    /* ── Visit log section ── */
+    .visit-section { margin: 10px 0; }
+    .visit-log-hdr { display: flex; justify-content: space-between; align-items: center; }
+    .visit-log-hdr button { font-size: .65rem; padding: 2px 7px; border: none; border-radius: 4px; background: var(--bark); color: var(--cream); cursor: pointer; }
+    .visit-form { background: var(--sand); border-radius: 6px; padding: 8px; margin-top: 5px; display: flex; flex-direction: column; gap: 5px; }
+    .visit-form input, .visit-form textarea { font-size: .75rem; border: 1px solid #ccbca3; border-radius: 5px; padding: 3px 6px; width: 100%; box-sizing: border-box; }
+    .visit-form textarea { resize: vertical; min-height: 48px; }
+    .visit-form-row { display: flex; gap: 6px; }
+    .visit-form-row label { font-size: .68rem; color: var(--bark); }
+    .visit-star-row { display: flex; gap: 3px; }
+    .star-btn { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: .35; padding: 0; }
+    .star-btn.active { opacity: 1; }
+    .visit-form-actions { display: flex; gap: 5px; }
+    .visit-form-actions button { flex: 1; font-size: .72rem; padding: 4px; border: none; border-radius: 5px; cursor: pointer; }
+    .visit-save-btn { background: var(--teal); color: #fff; }
+    .visit-cancel-btn { background: #ccc; color: #333; }
+    .visit-entry { display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid var(--sand); font-size: .77rem; }
+    .visit-entry:last-child { border-bottom: none; }
+    .visit-entry-info { flex: 1; }
+    .visit-date-stars { font-weight: 600; }
+    .visit-notes { font-size: .71rem; color: var(--bark); margin-top: 2px; }
+    .visit-del-btn { background: none; border: none; cursor: pointer; color: #a08060; font-size: .8rem; }
+
+    /* ── ISP section ── */
+    .isp-section { margin: 8px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .isp-badge { font-size: .7rem; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+    .isp-badge.fiber { background: #d4f0e0; color: #1a6e3a; }
+    .isp-badge.cable { background: #d8eaf8; color: #1a4a7a; }
+    .isp-badge.none  { background: #f2e0d8; color: #7a3020; }
+    .isp-check-btn { font-size: .65rem; padding: 2px 7px; border: 1px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; color: var(--bark); }
+
     /* ── Hospital drive-time filter ── */
     .hosp-drive-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; margin-top: 4px; font-size: 0.72rem; color: var(--bark); }
     .hosp-drive-filter-row label { white-space: nowrap; }
@@ -697,11 +748,27 @@
         <input type="number" id="max-price-input" placeholder="3500" min="1000" max="10000" step="100"
                onchange="applyFilters()" />
       </div>
-      <div class="commute-row">
-        <label>Commute:</label>
-        <input type="text" id="commute-input" placeholder="Work address…"
-               onkeydown="if(event.key==='Enter')setCommuteAnchor()" />
-        <button onclick="setCommuteAnchor()">Set</button>
+      <div class="commute-section">
+        <div class="commute-section-hdr">
+          <label>Commute Anchors</label>
+          <button onclick="openAddAnchorForm()">+ Add</button>
+        </div>
+        <div id="anchor-list" class="anchor-list"></div>
+        <div id="add-anchor-form" class="add-anchor-form" style="display:none">
+          <input type="text" id="anchor-name-input" placeholder="Name (e.g. Baptist Bethesda)" />
+          <input type="text" id="anchor-addr-input" placeholder="Address or place…"
+                 onkeydown="if(event.key==='Enter')addAnchor()" />
+          <div class="add-anchor-form-row">
+            <label style="font-size:.65rem;color:var(--bark)">Weight:</label>
+            <input type="range" id="anchor-weight-slider" min="1" max="10" value="5"
+                   oninput="document.getElementById('anchor-weight-val').textContent=this.value" />
+            <span id="anchor-weight-val">5</span>
+          </div>
+          <div class="add-anchor-form-actions">
+            <button class="btn-add" onclick="addAnchor()">Add</button>
+            <button class="btn-cancel" onclick="closeAddAnchorForm()">Cancel</button>
+          </div>
+        </div>
       </div>
       <div class="amenity-filter-row">
         <button class="amenity-filter-pill" data-amenity="parking"     onclick="toggleAmenityFilter('parking',this)">Parking</button>
@@ -887,8 +954,10 @@ let activeId = null;
 let currentFilter = 'all';
 let map;
 let compareIds = new Set();        // apartment IDs selected for comparison
-let commuteAnchor = null;          // {name, lat, lon} – stored in localStorage
-let commuteMarker = null;          // Leaflet marker for commute anchor
+let commuteAnchor = null;          // legacy single anchor (kept for backwards compat)
+let commuteMarker = null;          // legacy single marker
+let commuteAnchors = [];           // [{id, name, lat, lon, weight}] — multi-anchor list
+let commuteMarkers = {};           // {anchorId: Leaflet marker}
 let requiredAmenities = new Set(); // amenity keys that must be present
 let activeSubtypes = new Set();    // subtype filter (empty = all)
 let maxHospitalDriveMins = Infinity; // filter: max drive time from hospital to nearest apartment
@@ -1006,11 +1075,12 @@ function getFilteredLocations() {
       const tb = b.location_type === 'hospital' ? minDriveToAnyApt(b) : 0;
       if (ta !== tb) return ta - tb;
     }
-    // If commute anchor set and browsing apartments, sort by commute time
-    if (commuteAnchor && (currentFilter === 'apartment' || currentFilter === 'shortlisted')) {
+    // If commute anchors set and browsing apartments, sort by weighted avg commute time
+    const sortAnchor = commuteAnchors.length ? commuteAnchors[0] : commuteAnchor;
+    if (sortAnchor && (currentFilter === 'apartment' || currentFilter === 'shortlisted')) {
       if (a.location_type === 'apartment' && b.location_type === 'apartment') {
-        const ta = driveMins(a, commuteAnchor);
-        const tb = driveMins(b, commuteAnchor);
+        const ta = driveMins(a, sortAnchor);
+        const tb = driveMins(b, sortAnchor);
         if (ta !== tb) return ta - tb;
       }
     }
@@ -1045,9 +1115,10 @@ function renderCards() {
       .map(a => `<span class="amenity-pill">${AMENITY_LABELS[a] || a}</span>`).join('');
     const amenityPillsHtml = amenityPills ? `<div class="amenity-pills">${amenityPills}</div>` : '';
 
-    // Commute time badge
-    const commuteHtml = commuteAnchor && loc.location_type === 'apartment' && loc.lat && loc.lon
-      ? `<div class="commute-time-badge">🚗 ${driveMins(loc, commuteAnchor)} min to ${escHtml(commuteAnchor.name)}</div>`
+    // Commute time badges (multi-anchor)
+    const anchorsForCard = commuteAnchors.length ? commuteAnchors : (commuteAnchor ? [commuteAnchor] : []);
+    const commuteHtml = anchorsForCard.length > 0 && loc.location_type === 'apartment' && loc.lat && loc.lon
+      ? anchorsForCard.map(a => `<div class="commute-time-badge">🚗 ${driveMins(loc, a)} min to ${escHtml(a.name)}</div>`).join('')
       : '';
 
     // Hospital: nearest apartment drive time
@@ -1153,6 +1224,15 @@ function renderDetail(loc) {
 
   // Amenities checklist section
   const amenitiesHtml = loc.location_type === 'apartment' ? buildAmenitiesSection(loc) : '';
+
+  // True monthly cost section (apartments only)
+  const costDetailsHtml = loc.location_type === 'apartment' ? buildCostDetails(loc) : '';
+
+  // Visit log section
+  const visitLogHtml = buildVisitLog(loc);
+
+  // ISP display
+  const ispHtml = buildISPSection(loc);
 
   // Units table
   let unitsHtml = '';
@@ -1271,9 +1351,12 @@ function renderDetail(loc) {
     </div>
     ${loc.notes ? `<div class="detail-notes">${loc.notes}</div>` : ''}
     ${prosConsHtml}
+    ${visitLogHtml}
     ${unitsHtml}
+    ${costDetailsHtml}
     ${amenitiesHtml}
     ${proximityHtml}
+    ${ispHtml}
     ${loc.website_url ? `<a class="detail-link" href="${loc.website_url}" target="_blank" rel="noopener">↗ Visit website</a>` : ''}
     ${loc.phone ? `<div style="font-size:.75rem;margin-top:6px;color:var(--bark)">📞 ${loc.phone}</div>` : ''}
     ${scraped ? `<div style="font-size:.68rem;margin-top:10px;color:#aaa">Last scraped: ${scraped}</div>` : ''}
@@ -1283,6 +1366,8 @@ function renderDetail(loc) {
       Remove from tracking
     </button>
   `;
+  // Load visits asynchronously after the DOM is updated
+  loadVisits(loc.id);
 }
 
 async function deleteLocation(id) {
@@ -1370,6 +1455,218 @@ function setHospDriveFilter(val) {
   document.getElementById('hosp-drive-label').textContent =
     maxHospitalDriveMins === Infinity ? 'Any' : `≤${val} min`;
   renderCards();
+}
+
+// ── True monthly cost section ─────────────────────────────────────────────────
+function buildCostDetails(loc) {
+  const cd = loc.cost_details || {};
+  const cheapest = (loc.units || []).filter(u => u.price_min).map(u => u.price_min).reduce((a, b) => Math.min(a, b), Infinity);
+  const parking    = cd.parking_cost || 0;
+  const utilities  = cd.utilities_estimate || 0;
+  const pet        = cd.pet_fee || 0;
+  const amenity    = cd.amenity_fee || 0;
+  const concession = cd.concession_months || 0;
+  const lease      = cd.lease_term_months || 12;
+  const extras = parking + utilities + pet + amenity;
+  let trueMonthly = isFinite(cheapest) ? cheapest + extras - (concession > 0 ? Math.round(cheapest * concession / lease) : 0) : null;
+
+  const trueLabel = trueMonthly != null
+    ? `<span class="true-monthly">All-in ~$${trueMonthly.toLocaleString()}/mo</span>`
+    : `<span style="font-size:.72rem;color:var(--bark)">Enter costs below</span>`;
+
+  return `
+    <div class="cost-section">
+      <div class="cost-section-hdr">
+        <div class="section-title" style="margin:0">True Monthly Cost</div>
+        ${trueLabel}
+      </div>
+      <div class="cost-fields">
+        <div class="cost-field"><label>Rent (from listing)</label>
+          <input type="number" id="cd-rent-${loc.id}" placeholder="auto" value="${isFinite(cheapest) ? cheapest : ''}" readonly style="background:#f0ece4;color:var(--bark)" /></div>
+        <div class="cost-field"><label>Parking ($/mo)</label>
+          <input type="number" id="cd-parking-${loc.id}" placeholder="0" value="${parking || ''}" min="0" /></div>
+        <div class="cost-field"><label>Utilities est. ($/mo)</label>
+          <input type="number" id="cd-utilities-${loc.id}" placeholder="0" value="${utilities || ''}" min="0" /></div>
+        <div class="cost-field"><label>Pet fee ($/mo)</label>
+          <input type="number" id="cd-pet-${loc.id}" placeholder="0" value="${pet || ''}" min="0" /></div>
+        <div class="cost-field"><label>Amenity fee ($/mo)</label>
+          <input type="number" id="cd-amenity-${loc.id}" placeholder="0" value="${amenity || ''}" min="0" /></div>
+        <div class="cost-field"><label>Free months</label>
+          <input type="number" id="cd-concession-${loc.id}" placeholder="0" value="${concession || ''}" min="0" max="3" /></div>
+        <div class="cost-field"><label>Lease term (mo)</label>
+          <input type="number" id="cd-lease-${loc.id}" placeholder="12" value="${lease || ''}" min="1" max="24" /></div>
+      </div>
+      <button class="cost-save-btn" onclick="saveCostDetails(${loc.id})">Save Cost Breakdown</button>
+    </div>`;
+}
+
+async function saveCostDetails(locId) {
+  const g = id => { const el = document.getElementById(id); return el ? (parseInt(el.value) || null) : null; };
+  const payload = {
+    parking_cost:        g(`cd-parking-${locId}`),
+    utilities_estimate:  g(`cd-utilities-${locId}`),
+    pet_fee:             g(`cd-pet-${locId}`),
+    amenity_fee:         g(`cd-amenity-${locId}`),
+    concession_months:   g(`cd-concession-${locId}`),
+    lease_term_months:   g(`cd-lease-${locId}`) || 12,
+  };
+  try {
+    await fetch(`/api/locations/${locId}/cost-details`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    await loadLocations();
+    const loc = allLocations.find(l => l.id === locId);
+    if (loc) renderDetail(loc);
+  } catch (e) {
+    alert('Failed to save cost details');
+  }
+}
+
+// ── Visit log section ─────────────────────────────────────────────────────────
+let _visitFormOpen = null;   // locId for which the visit form is open
+let _visitStars = 0;
+
+function buildVisitLog(loc) {
+  return `
+    <div class="visit-section" id="visit-section-${loc.id}">
+      <div class="section-title">Visit Log</div>
+      <div class="visit-log-hdr">
+        <button onclick="openVisitForm(${loc.id})">+ Log Visit</button>
+      </div>
+      <div id="visit-form-${loc.id}" style="display:none" class="visit-form">
+        <input type="date" id="vf-date-${loc.id}" value="${new Date().toISOString().split('T')[0]}" />
+        <div style="font-size:.65rem;color:var(--bark)">Impression:</div>
+        <div class="visit-star-row" id="vf-stars-${loc.id}">
+          ${[1,2,3,4,5].map(n => `<button class="star-btn" data-star="${n}" onclick="setVisitStar(${loc.id},${n})">★</button>`).join('')}
+        </div>
+        <textarea id="vf-notes-${loc.id}" placeholder="Notes about this visit…"></textarea>
+        <div class="visit-form-actions">
+          <button class="visit-save-btn" onclick="saveVisit(${loc.id})">Save</button>
+          <button class="visit-cancel-btn" onclick="closeVisitForm(${loc.id})">Cancel</button>
+        </div>
+      </div>
+      <div id="visit-list-${loc.id}"><div style="font-size:.72rem;color:var(--bark);font-style:italic">Loading…</div></div>
+    </div>`;
+}
+
+function openVisitForm(locId) {
+  _visitFormOpen = locId;
+  _visitStars = 0;
+  document.getElementById(`visit-form-${locId}`).style.display = 'flex';
+  document.getElementById(`visit-form-${locId}`).style.flexDirection = 'column';
+}
+function closeVisitForm(locId) {
+  document.getElementById(`visit-form-${locId}`).style.display = 'none';
+}
+function setVisitStar(locId, n) {
+  _visitStars = n;
+  document.querySelectorAll(`#vf-stars-${locId} .star-btn`).forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.star) <= n);
+  });
+}
+
+async function saveVisit(locId) {
+  const date  = document.getElementById(`vf-date-${locId}`).value;
+  const notes = document.getElementById(`vf-notes-${locId}`).value.trim();
+  if (!date) { alert('Please enter a date'); return; }
+  try {
+    const res = await fetch(`/api/locations/${locId}/visits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visit_date: date, impression: _visitStars || null, notes: notes || null }),
+    });
+    const visits = await res.json();
+    closeVisitForm(locId);
+    renderVisitList(locId, visits);
+  } catch (e) {
+    alert('Failed to save visit');
+  }
+}
+
+async function loadVisits(locId) {
+  try {
+    const res = await fetch(`/api/locations/${locId}/visits`);
+    const visits = await res.json();
+    renderVisitList(locId, visits);
+  } catch (_) {}
+}
+
+function renderVisitList(locId, visits) {
+  const el = document.getElementById(`visit-list-${locId}`);
+  if (!el) return;
+  if (!visits.length) {
+    el.innerHTML = '<div style="font-size:.72rem;color:var(--bark);font-style:italic">No visits logged yet.</div>';
+    return;
+  }
+  el.innerHTML = visits.map(v => {
+    const stars = v.impression ? '★'.repeat(v.impression) + '☆'.repeat(5 - v.impression) : '';
+    return `<div class="visit-entry">
+      <div class="visit-entry-info">
+        <div class="visit-date-stars">${v.visit_date} ${stars ? `<span style="color:#c8a060">${stars}</span>` : ''}</div>
+        ${v.notes ? `<div class="visit-notes">${escHtml(v.notes)}</div>` : ''}
+      </div>
+      <button class="visit-del-btn" onclick="deleteVisit(${v.id},${locId})" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteVisit(visitId, locId) {
+  if (!confirm('Delete this visit?')) return;
+  try {
+    await fetch(`/api/visits/${visitId}`, { method: 'DELETE' });
+    const res = await fetch(`/api/locations/${locId}/visits`);
+    const visits = await res.json();
+    renderVisitList(locId, visits);
+  } catch (_) {}
+}
+
+// ── ISP section ───────────────────────────────────────────────────────────────
+function buildISPSection(loc) {
+  if (loc.location_type !== 'apartment') return '';
+  const isp = loc.isp_data;
+  let badge = '';
+  if (isp) {
+    if (isp.has_fiber) {
+      const fiberP = isp.providers.find(p => p.type === 'fiber');
+      badge = `<span class="isp-badge fiber">⚡ Fiber ${fiberP ? fiberP.down + ' Mbps' : ''}</span>`;
+    } else if (isp.providers && isp.providers.length) {
+      const best = isp.providers[0];
+      badge = `<span class="isp-badge cable">📡 ${best.name} · ${best.down} Mbps</span>`;
+    } else {
+      badge = `<span class="isp-badge none">⚠ No broadband found</span>`;
+    }
+  }
+  const fetched = isp?.fetched_at ? ` · checked ${isp.fetched_at}` : '';
+  return `<div class="isp-section">
+    <span class="section-title" style="margin:0">Internet</span>
+    ${badge}
+    <button class="isp-check-btn" onclick="checkISP(${loc.id})" id="isp-btn-${loc.id}">
+      ${isp ? '↺ Refresh' : 'Check'}
+    </button>
+    ${fetched ? `<span style="font-size:.62rem;color:#aaa">${fetched}</span>` : ''}
+  </div>`;
+}
+
+async function checkISP(locId) {
+  const btn = document.getElementById(`isp-btn-${locId}`);
+  if (btn) { btn.textContent = '…'; btn.disabled = true; }
+  try {
+    const res = await fetch(`/api/locations/${locId}/fetch-isp`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(`ISP lookup failed: ${err.detail || 'unknown error'}`);
+      return;
+    }
+    await loadLocations();
+    const loc = allLocations.find(l => l.id === locId);
+    if (loc) renderDetail(loc);
+  } catch (e) {
+    alert('ISP check failed');
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
 }
 
 // ── Filters ──────────────────────────────────────────────────────────────────
@@ -2145,11 +2442,12 @@ function renderCompareTable(apts) {
     return nums.map(v => (v === null || v === undefined) ? '' : v === best ? 'best' : v === worst ? 'worst' : '');
   }
 
-  const commuteRow = commuteAnchor ? [{
-    label: `Commute`,
-    values: apts.map(a => a.lat && a.lon ? `~${driveMins(a, commuteAnchor)} min` : '—'),
-    classes: markBestWorst(apts.map(a => a.lat && a.lon ? driveMins(a, commuteAnchor) : null), true),
-  }] : [];
+  const effectiveAnchors = commuteAnchors.length ? commuteAnchors : (commuteAnchor ? [commuteAnchor] : []);
+  const commuteRow = effectiveAnchors.map(anchor => ({
+    label: `To ${anchor.name}`,
+    values: apts.map(a => a.lat && a.lon ? `~${driveMins(a, anchor)} min` : '—'),
+    classes: markBestWorst(apts.map(a => a.lat && a.lon ? driveMins(a, anchor) : null), true),
+  }));
 
   const rows = [
     {
@@ -2171,6 +2469,28 @@ function renderCompareTable(apts) {
       classes: markBestWorst(apts.map(a => {
         const prices = (a.units || []).map(u => u.price_min).filter(Boolean);
         return prices.length ? Math.min(...prices) : null;
+      }), true),
+    },
+    {
+      label: 'All-in/mo',
+      values: apts.map(a => {
+        const cd = a.cost_details || {};
+        const prices = (a.units || []).map(u => u.price_min).filter(Boolean);
+        if (!prices.length) return '—';
+        const cheapest = Math.min(...prices);
+        const extras = (cd.parking_cost||0)+(cd.utilities_estimate||0)+(cd.pet_fee||0)+(cd.amenity_fee||0);
+        const concession = cd.concession_months || 0;
+        const lease = cd.lease_term_months || 12;
+        const tm = cheapest + extras - (concession ? Math.round(cheapest*concession/lease) : 0);
+        return extras ? `~$${tm.toLocaleString()}` : '—';
+      }),
+      classes: markBestWorst(apts.map(a => {
+        const cd = a.cost_details || {};
+        const prices = (a.units || []).map(u => u.price_min).filter(Boolean);
+        if (!prices.length) return null;
+        const cheapest = Math.min(...prices);
+        const extras = (cd.parking_cost||0)+(cd.utilities_estimate||0)+(cd.pet_fee||0)+(cd.amenity_fee||0);
+        return cheapest + extras;
       }), true),
     },
     {
@@ -2208,6 +2528,17 @@ function renderCompareTable(apts) {
         ? (a.cons || []).map(c => `<div>✗ ${escHtml(c)}</div>`).join('')
         : '<span style="color:#aaa">—</span>'),
       classes: apts.map(() => ''),
+    },
+    {
+      label: 'Internet',
+      values: apts.map(a => {
+        const isp = a.isp_data;
+        if (!isp) return '—';
+        if (isp.has_fiber) return `⚡ Fiber ${isp.best_down_mbps}Mbps`;
+        if (isp.providers && isp.providers.length) return `📡 ${isp.providers[0].name} ${isp.best_down_mbps}Mbps`;
+        return '⚠ No broadband';
+      }),
+      classes: markBestWorst(apts.map(a => a.isp_data?.best_down_mbps ?? null)),
     },
     {
       label: 'Verdict',
@@ -2277,73 +2608,123 @@ function toggleSubtypeFilter(subtype, btn) {
   renderCards();
 }
 
-// ── Commute anchor ────────────────────────────────────────────────────────────
+// ── Multi-anchor commute management ───────────────────────────────────────────
+
+const ANCHOR_COLORS = ['#4a7fa5','#c06050','#3a8a7a','#8a5ca5','#b07a20','#205a90'];
+
 async function loadCommuteAnchor() {
-  // Server is the primary source so the anchor persists across browsers/devices
-  // and is used for server-side score computation.
+  // Load multi-anchors from server; fall back to old single anchor for backwards compat
+  try {
+    const res = await fetch('/api/settings/commute-anchors');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length) {
+        commuteAnchors = data;
+        renderAnchorList();
+        _placeAnchorMarkers();
+        return;
+      }
+    }
+  } catch (_) {}
+  // Fall back to legacy single anchor
   try {
     const res = await fetch('/api/settings/commute-anchor');
     if (res.ok) {
       const data = await res.json();
       if (data && data.lat && data.lon) {
         commuteAnchor = data;
-        const input = document.getElementById('commute-input');
-        if (input) { input.value = commuteAnchor.name; input.style.color = 'var(--teal)'; }
-        localStorage.setItem('commuteAnchor', JSON.stringify(commuteAnchor));
-        return;
+        commuteAnchors = [{ id: 'legacy', ...data, weight: 1.0 }];
+        renderAnchorList();
+        _placeAnchorMarkers();
       }
-    }
-  } catch (_) {}
-  // Fall back to localStorage if server unavailable
-  try {
-    const saved = localStorage.getItem('commuteAnchor');
-    if (saved) {
-      commuteAnchor = JSON.parse(saved);
-      const input = document.getElementById('commute-input');
-      if (input) { input.value = commuteAnchor.name; input.style.color = 'var(--teal)'; }
     }
   } catch (_) {}
 }
 
-async function setCommuteAnchor() {
-  const input = document.getElementById('commute-input');
-  const q = (input.value || '').trim();
-  if (!q) {
-    commuteAnchor = null;
-    localStorage.removeItem('commuteAnchor');
-    input.style.color = '';
-    if (commuteMarker) { commuteMarker.remove(); commuteMarker = null; }
-    await fetch('/api/settings/commute-anchor', { method: 'DELETE' });
-    await loadLocations();
-    return;
-  }
+function renderAnchorList() {
+  const el = document.getElementById('anchor-list');
+  if (!el) return;
+  if (!commuteAnchors.length) { el.innerHTML = '<div style="font-size:.68rem;color:var(--bark);font-style:italic">No anchors set</div>'; return; }
+  const total = commuteAnchors.reduce((s, a) => s + (a.weight || 1), 0);
+  el.innerHTML = commuteAnchors.map((a, i) => {
+    const color = ANCHOR_COLORS[i % ANCHOR_COLORS.length];
+    const pct = Math.round((a.weight || 1) / total * 100);
+    return `<div class="anchor-item">
+      <div class="anchor-dot" style="background:${color}"></div>
+      <span class="anchor-name" title="${escHtml(a.name)}">${escHtml(a.name)}</span>
+      <span class="anchor-weight">${pct}%</span>
+      <button class="anchor-remove" onclick="removeAnchor('${a.id}')" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function _placeAnchorMarkers() {
+  // Clear old anchor markers
+  Object.values(commuteMarkers).forEach(m => m.remove());
+  commuteMarkers = {};
+  commuteAnchors.forEach((a, i) => {
+    if (!a.lat || !a.lon) return;
+    const color = ANCHOR_COLORS[i % ANCHOR_COLORS.length];
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:13px;height:13px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
+      iconSize: [13, 13], iconAnchor: [6, 6],
+    });
+    commuteMarkers[a.id] = L.marker([a.lat, a.lon], { icon })
+      .addTo(map)
+      .bindTooltip(`🚗 ${a.name}`, { permanent: false, direction: 'top', offset: [0, -8] });
+  });
+}
+
+async function _saveAnchorsThenReload() {
+  await fetch('/api/settings/commute-anchors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ anchors: commuteAnchors }),
+  });
+  renderAnchorList();
+  _placeAnchorMarkers();
+  await loadLocations();
+}
+
+function openAddAnchorForm() {
+  document.getElementById('add-anchor-form').style.display = 'flex';
+  document.getElementById('add-anchor-form').style.flexDirection = 'column';
+  document.getElementById('anchor-name-input').focus();
+}
+function closeAddAnchorForm() {
+  document.getElementById('add-anchor-form').style.display = 'none';
+  document.getElementById('anchor-name-input').value = '';
+  document.getElementById('anchor-addr-input').value = '';
+  document.getElementById('anchor-weight-slider').value = 5;
+  document.getElementById('anchor-weight-val').textContent = '5';
+}
+
+async function addAnchor() {
+  const name = document.getElementById('anchor-name-input').value.trim();
+  const addr = document.getElementById('anchor-addr-input').value.trim();
+  const weight = parseFloat(document.getElementById('anchor-weight-slider').value) || 5;
+  const q = addr || name;
+  if (!q) { alert('Please enter an address or place name.'); return; }
   try {
     const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
     if (!res.ok) throw new Error('Not found');
     const data = await res.json();
-    commuteAnchor = { name: q, lat: data.lat, lon: data.lon };
-    localStorage.setItem('commuteAnchor', JSON.stringify(commuteAnchor));
-    input.style.color = 'var(--teal)';
-    if (commuteMarker) commuteMarker.remove();
-    const icon = L.divIcon({
-      className: '',
-      html: `<div style="width:12px;height:12px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-      iconSize: [12, 12], iconAnchor: [6, 6],
-    });
-    commuteMarker = L.marker([commuteAnchor.lat, commuteAnchor.lon], { icon })
-      .addTo(map)
-      .bindTooltip(`🚗 ${commuteAnchor.name}`, { permanent: false, direction: 'top', offset: [0, -8] });
-    // Save to server so scores are recomputed server-side, then reload
-    await fetch('/api/settings/commute-anchor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(commuteAnchor),
-    });
-    await loadLocations();
+    const id = 'anchor_' + Date.now();
+    commuteAnchors.push({ id, name: name || q, lat: data.lat, lon: data.lon, weight });
+    closeAddAnchorForm();
+    await _saveAnchorsThenReload();
   } catch (_) {
     alert(`Could not geocode "${q}". Try a more specific address.`);
-    input.style.color = 'var(--coral)';
   }
+}
+
+async function removeAnchor(anchorId) {
+  commuteAnchors = commuteAnchors.filter(a => a.id !== anchorId);
+  if (commuteMarkers[anchorId]) { commuteMarkers[anchorId].remove(); delete commuteMarkers[anchorId]; }
+  await fetch(`/api/settings/commute-anchors/${anchorId}`, { method: 'DELETE' });
+  renderAnchorList();
+  await loadLocations();
 }
 
 // ── Mobile tabs ──────────────────────────────────────────────────────────────
@@ -2358,6 +2739,30 @@ function switchMobileTab(tab) {
   );
   if (tab === 'map') setTimeout(() => map.invalidateSize(), 50);
 }
+
+// ── Detail panel resize handle ────────────────────────────────────────────────
+(function() {
+  const handle = document.getElementById('detail-resize-handle');
+  const panel  = document.getElementById('detail-panel');
+  let startX = 0, startW = 0, dragging = false;
+  handle.addEventListener('mousedown', e => {
+    startX = e.clientX; startW = panel.offsetWidth; dragging = true;
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const dx = startX - e.clientX;   // drag left = wider panel
+    panel.style.width = Math.max(360, Math.min(900, startW + dx)) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.userSelect = '';
+  });
+})();
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 if (window.innerWidth <= 768) {
