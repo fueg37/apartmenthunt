@@ -605,6 +605,11 @@
       font-size: .68rem; background: var(--bark); color: var(--cream);
       border: none; border-radius: 5px; padding: 4px 7px; cursor: pointer; white-space: nowrap;
     }
+    /* ── Hospital drive-time filter ── */
+    .hosp-drive-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; margin-top: 4px; font-size: 0.72rem; color: var(--bark); }
+    .hosp-drive-filter-row label { white-space: nowrap; }
+    .hosp-drive-filter-row input[type=range] { flex: 1; min-width: 80px; max-width: 130px; }
+    .hosp-drive-filter-row span { white-space: nowrap; min-width: 32px; }
     .commute-time-badge { font-size: .67rem; color: var(--blue); font-weight: 600; margin-top: 2px; }
 
     /* ── Mobile tab bar (hidden on desktop) ── */
@@ -711,6 +716,12 @@
         <button class="amenity-filter-pill" data-subtype="townhome"   onclick="toggleSubtypeFilter('townhome',this)">Townhome</button>
         <button class="amenity-filter-pill" data-subtype="condo"      onclick="toggleSubtypeFilter('condo',this)">Condo</button>
         <button class="amenity-filter-pill" data-subtype="studio"     onclick="toggleSubtypeFilter('studio',this)">Studio</button>
+      </div>
+      <div class="hosp-drive-filter-row" id="hosp-drive-filter-row" style="display:none">
+        <label>Max drive to apt:</label>
+        <input type="range" id="hosp-drive-slider" min="5" max="60" step="5" value="60"
+               oninput="setHospDriveFilter(this.value)" />
+        <span id="hosp-drive-label">Any</span>
       </div>
     </div>
     <div id="cards-list"></div>
@@ -880,6 +891,7 @@ let commuteAnchor = null;          // {name, lat, lon} – stored in localStorag
 let commuteMarker = null;          // Leaflet marker for commute anchor
 let requiredAmenities = new Set(); // amenity keys that must be present
 let activeSubtypes = new Set();    // subtype filter (empty = all)
+let maxHospitalDriveMins = Infinity; // filter: max drive time from hospital to nearest apartment
 
 const AMENITY_LABELS = {
   parking: 'Parking', pool: 'Pool', gym: 'Gym on-site', washer_dryer: 'In-unit W/D',
@@ -981,8 +993,19 @@ function getFilteredLocations() {
       if (loc.location_type !== 'apartment') return false;
       if (!activeSubtypes.has(loc.subtype || 'apartment')) return false;
     }
+    // Hospital drive-time filter: only keep hospitals reachable within N mins of any apartment
+    if (loc.location_type === 'hospital' && maxHospitalDriveMins !== Infinity) {
+      if (!loc.lat || !loc.lon) return false;
+      if (minDriveToAnyApt(loc) > maxHospitalDriveMins) return false;
+    }
     return true;
   }).sort((a, b) => {
+    // When browsing hospitals, sort by min drive time to nearest apartment
+    if (currentFilter === 'hospital') {
+      const ta = a.location_type === 'hospital' ? minDriveToAnyApt(a) : 0;
+      const tb = b.location_type === 'hospital' ? minDriveToAnyApt(b) : 0;
+      if (ta !== tb) return ta - tb;
+    }
     // If commute anchor set and browsing apartments, sort by commute time
     if (commuteAnchor && (currentFilter === 'apartment' || currentFilter === 'shortlisted')) {
       if (a.location_type === 'apartment' && b.location_type === 'apartment') {
@@ -1027,6 +1050,15 @@ function renderCards() {
       ? `<div class="commute-time-badge">🚗 ${driveMins(loc, commuteAnchor)} min to ${escHtml(commuteAnchor.name)}</div>`
       : '';
 
+    // Hospital: nearest apartment drive time
+    const hospAptHtml = loc.location_type === 'hospital' && loc.lat && loc.lon
+      ? (() => {
+          const mins = minDriveToAnyApt(loc);
+          return mins === Infinity ? '' :
+            `<div class="commute-time-badge">🏠 ~${mins} min to nearest apt</div>`;
+        })()
+      : '';
+
     // Verdict row
     const v = loc.verdict || 'neutral';
     const verdictHtml = loc.location_type === 'apartment'
@@ -1067,11 +1099,12 @@ function renderCards() {
         ${subtypeBadge}
         ${loc.is_top_pick ? '<span class="badge badge-top">TOP PICK</span>' : ''}
         ${decisionHtml}
-        <span class="card-rating">${loc.rating ? '⭐ ' + loc.rating.toFixed(1) : ''}</span>
+        <span class="card-rating" ${loc.location_type === 'hospital' ? 'style="opacity:0.45;font-size:0.78em"' : ''}>${loc.rating ? '⭐ ' + loc.rating.toFixed(1) : ''}</span>
       </div>
       ${priceHtml}
       ${amenityPillsHtml}
       ${commuteHtml}
+      ${hospAptHtml}
       ${verdictHtml}
     `;
     list.appendChild(card);
@@ -1325,6 +1358,20 @@ function driveMins(a, b) {
   return Math.round(km * 0.621371 / 24 * 60);
 }
 
+function minDriveToAnyApt(loc) {
+  const apts = allLocations.filter(l => l.location_type === 'apartment' && l.lat && l.lon);
+  if (!apts.length) return Infinity;
+  return Math.min(...apts.map(a => driveMins(loc, a)));
+}
+
+function setHospDriveFilter(val) {
+  val = parseInt(val);
+  maxHospitalDriveMins = val >= 60 ? Infinity : val;
+  document.getElementById('hosp-drive-label').textContent =
+    maxHospitalDriveMins === Infinity ? 'Any' : `≤${val} min`;
+  renderCards();
+}
+
 // ── Filters ──────────────────────────────────────────────────────────────────
 function setFilter(btn, type) {
   // Close discover panel if open
@@ -1336,6 +1383,13 @@ function setFilter(btn, type) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentFilter = type;
+  const hospRow = document.getElementById('hosp-drive-filter-row');
+  if (hospRow) hospRow.style.display = (type === 'hospital') ? 'flex' : 'none';
+  if (type !== 'hospital') {
+    maxHospitalDriveMins = Infinity;
+    const slider = document.getElementById('hosp-drive-slider');
+    if (slider) { slider.value = 60; document.getElementById('hosp-drive-label').textContent = 'Any'; }
+  }
   renderCards();
 }
 
