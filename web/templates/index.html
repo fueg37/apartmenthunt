@@ -915,8 +915,9 @@ function getFilteredLocations() {
         if (!locAmenities.has(req)) return false;
       }
     }
-    // Subtype filter – only applied to apartments
-    if (activeSubtypes.size > 0 && loc.location_type === 'apartment') {
+    // Subtype filter – when any subtype pill is active, restrict to apartments matching that subtype
+    if (activeSubtypes.size > 0) {
+      if (loc.location_type !== 'apartment') return false;
       if (!activeSubtypes.has(loc.subtype || 'apartment')) return false;
     }
     return true;
