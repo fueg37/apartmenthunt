@@ -30,24 +30,23 @@ async def fetch_isp_availability(lat: float, lon: float) -> dict:
     }
     """
     url = "https://broadbandmap.fcc.gov/api/public/map/listAvailability"
-    params = {
+    body = {
         "latitude": lat,
         "longitude": lon,
         "unit": 0,
-        "addr": "",
-        "city": "",
-        "state": "",
-        "zip": "",
         "category": "Residential Fixed Broadband",
     }
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.post(url, json=body)
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPStatusError as exc:
-        raise RuntimeError(f"FCC API returned {exc.response.status_code}") from exc
+        raise RuntimeError(
+            f"FCC API returned {exc.response.status_code} — "
+            "check https://broadbandmap.fcc.gov manually"
+        ) from exc
     except Exception as exc:
         raise RuntimeError(f"FCC API request failed: {exc}") from exc
 
