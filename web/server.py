@@ -388,7 +388,8 @@ def _decision_insight_for_location(
         if priced:
             cheapest = min(priced)
             target_budget = 3500
-            components["affordability"] = _clamp(100.0 - ((cheapest - 1800) / (target_budget - 1800)) * 100.0)
+            ratio = (cheapest - 1800) / (target_budget - 1800)
+            components["affordability"] = _clamp((1.0 - math.sqrt(max(0.0, ratio))) * 100.0)
             reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
         elif unit_list:
             components["affordability"] = 50.0
@@ -425,11 +426,19 @@ def _decision_insight_for_location(
     if score >= 80:
         tier, summary = "strong_fit", "Strong fit right now"
     elif score >= 65:
-        tier, summary = "promising", "Promising, worth active monitoring"
+        tier, summary = "promising", "Promising — worth a visit"
     elif score >= 50:
-        tier, summary = "watch", "Watch list candidate"
+        tier, summary = "watch", "Good but has trade-offs"
     else:
-        tier, summary = "speculative", "Speculative; needs better signals"
+        tier = "speculative"
+        worst = min(components, key=lambda k: components[k])
+        summary = {
+            "affordability": "Near your budget ceiling",
+            "commute":       "Long commute from work anchor",
+            "amenities":     "Few confirmed amenities",
+            "rating":        "Low community rating",
+            "proximity":     "Far from key places",
+        }.get(worst, "Below threshold on key metrics")
 
     return {
         "score": score,
@@ -730,6 +739,28 @@ async def api_update_verdict(loc_id: int, payload: VerdictRequest) -> JSONRespon
     if not ok:
         raise HTTPException(404, "Location not found")
     return JSONResponse({"verdict": payload.verdict})
+
+
+@app.patch("/api/locations/{loc_id}/top-pick")
+async def patch_top_pick(loc_id: int, body: dict = Body(...)) -> JSONResponse:
+    async with get_db() as db:
+        cursor = await db.execute(
+            "UPDATE locations SET is_top_pick=? WHERE id=?",
+            [1 if body.get("is_top_pick") else 0, loc_id],
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Location not found")
+    return JSONResponse({"ok": True})
+
+
+@app.patch("/api/locations/{loc_id}/poi-category")
+async def patch_poi_category(loc_id: int, body: dict = Body(...)) -> JSONResponse:
+    async with get_db() as db:
+        ok = await _patch_extra_json(db, loc_id, {"category": body.get("category") or None})
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/geocode")
