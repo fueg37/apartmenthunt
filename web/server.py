@@ -341,11 +341,10 @@ def _decision_insight_for_location(
     base_weights: dict[str, float] = {}
     reasons: list[str] = []
 
-    # Rating (always included)
-    rating = loc.rating or 0.0
-    components["rating"] = _clamp((rating / 5.0) * 100.0)
-    base_weights["rating"] = 0.20
+    # Rating (conditional — only when a rating has been set)
     if loc.rating:
+        components["rating"] = _clamp((loc.rating / 5.0) * 100.0)
+        base_weights["rating"] = 0.20
         reasons.append(f"Rated {loc.rating:.1f}★ by users")
 
     # Top pick (always included)
@@ -760,6 +759,24 @@ async def patch_poi_category(loc_id: int, body: dict = Body(...)) -> JSONRespons
         ok = await _patch_extra_json(db, loc_id, {"category": body.get("category") or None})
     if not ok:
         raise HTTPException(404, "Location not found")
+    return JSONResponse({"ok": True})
+
+
+class RatingRequest(BaseModel):
+    rating: float | None = None
+    review_count: int | None = None
+
+
+@app.patch("/api/locations/{loc_id}/rating")
+async def patch_rating(loc_id: int, payload: RatingRequest) -> JSONResponse:
+    async with get_db() as db:
+        cursor = await db.execute(
+            "UPDATE locations SET rating=?, review_count=? WHERE id=?",
+            [payload.rating, payload.review_count, loc_id],
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Location not found")
     return JSONResponse({"ok": True})
 
 
