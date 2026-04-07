@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Body
 from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -341,11 +341,10 @@ def _decision_insight_for_location(
     base_weights: dict[str, float] = {}
     reasons: list[str] = []
 
-    # Rating (always included)
-    rating = loc.rating or 0.0
-    components["rating"] = _clamp((rating / 5.0) * 100.0)
-    base_weights["rating"] = 0.20
+    # Rating (conditional — only when a rating has been set)
     if loc.rating:
+        components["rating"] = _clamp((loc.rating / 5.0) * 100.0)
+        base_weights["rating"] = 0.20
         reasons.append(f"Rated {loc.rating:.1f}★ by users")
 
     # Top pick (always included)
@@ -388,7 +387,8 @@ def _decision_insight_for_location(
         if priced:
             cheapest = min(priced)
             target_budget = 3500
-            components["affordability"] = _clamp(100.0 - ((cheapest - 1800) / (target_budget - 1800)) * 100.0)
+            ratio = (cheapest - 1800) / (target_budget - 1800)
+            components["affordability"] = _clamp((1.0 - math.sqrt(max(0.0, ratio))) * 100.0)
             reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
         elif unit_list:
             components["affordability"] = 50.0
@@ -425,11 +425,19 @@ def _decision_insight_for_location(
     if score >= 80:
         tier, summary = "strong_fit", "Strong fit right now"
     elif score >= 65:
-        tier, summary = "promising", "Promising, worth active monitoring"
+        tier, summary = "promising", "Promising — worth a visit"
     elif score >= 50:
-        tier, summary = "watch", "Watch list candidate"
+        tier, summary = "watch", "Good but has trade-offs"
     else:
-        tier, summary = "speculative", "Speculative; needs better signals"
+        tier = "speculative"
+        worst = min(components, key=lambda k: components[k])
+        summary = {
+            "affordability": "Near your budget ceiling",
+            "commute":       "Long commute from work anchor",
+            "amenities":     "Few confirmed amenities",
+            "rating":        "Low community rating",
+            "proximity":     "Far from key places",
+        }.get(worst, "Below threshold on key metrics")
 
     return {
         "score": score,
@@ -730,6 +738,46 @@ async def api_update_verdict(loc_id: int, payload: VerdictRequest) -> JSONRespon
     if not ok:
         raise HTTPException(404, "Location not found")
     return JSONResponse({"verdict": payload.verdict})
+
+
+@app.patch("/api/locations/{loc_id}/top-pick")
+async def patch_top_pick(loc_id: int, body: dict = Body(...)) -> JSONResponse:
+    async with get_db() as db:
+        cursor = await db.execute(
+            "UPDATE locations SET is_top_pick=? WHERE id=?",
+            [1 if body.get("is_top_pick") else 0, loc_id],
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Location not found")
+    return JSONResponse({"ok": True})
+
+
+@app.patch("/api/locations/{loc_id}/poi-category")
+async def patch_poi_category(loc_id: int, body: dict = Body(...)) -> JSONResponse:
+    async with get_db() as db:
+        ok = await _patch_extra_json(db, loc_id, {"category": body.get("category") or None})
+    if not ok:
+        raise HTTPException(404, "Location not found")
+    return JSONResponse({"ok": True})
+
+
+class RatingRequest(BaseModel):
+    rating: float | None = None
+    review_count: int | None = None
+
+
+@app.patch("/api/locations/{loc_id}/rating")
+async def patch_rating(loc_id: int, payload: RatingRequest) -> JSONResponse:
+    async with get_db() as db:
+        cursor = await db.execute(
+            "UPDATE locations SET rating=?, review_count=? WHERE id=?",
+            [payload.rating, payload.review_count, loc_id],
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(404, "Location not found")
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/geocode")
@@ -1089,10 +1137,10 @@ async def _geocode_query(query: str) -> tuple[float | None, float | None, str | 
                     lat = loc_data.get("latitude")
                     lon = loc_data.get("longitude")
                     address = place.get("formattedAddress")
-                    if lat and lon:
+                    if lat is not None and lon is not None:
                         return float(lat), float(lon), address
         except Exception as e:
-            logger.debug(f"Google Places geocoding failed for '{query}': {e}")
+            logger.warning(f"Google Places geocoding failed for '{query}': {e}")
 
     # 2. Nominatim fallback (free, no key needed)
     try:
@@ -1101,7 +1149,7 @@ async def _geocode_query(query: str) -> tuple[float | None, float | None, str | 
         url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1&countrycodes=us"
         async with _httpx.AsyncClient(
             timeout=10.0,
-            headers={"User-Agent": "apartmenthunt/1.0"},
+            headers={"User-Agent": "apartmenthunt/1.0 (personal apartment search; https://github.com/fueg37/apartmenthunt)"},
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
@@ -1110,7 +1158,7 @@ async def _geocode_query(query: str) -> tuple[float | None, float | None, str | 
                 r = results[0]
                 return float(r["lat"]), float(r["lon"]), r.get("display_name")
     except Exception as e:
-        logger.debug(f"Nominatim geocoding failed for '{query}': {e}")
+        logger.warning(f"Nominatim geocoding failed for '{query}': {e}")
 
     return None, None, None
 
