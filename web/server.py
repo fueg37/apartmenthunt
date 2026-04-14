@@ -25,6 +25,7 @@ from db.history import get_changes
 from db.settings import get_setting, set_setting, delete_setting
 import db.discoveries as disc_db
 import db.visits as visits_db
+import db.profiles as profiles_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
 
 logger = logging.getLogger(__name__)
@@ -278,6 +279,10 @@ class CommuteAnchorsRequest(BaseModel):
     anchors: list[CommuteAnchorItem]
 
 
+class ProfileCreateRequest(BaseModel):
+    name: str
+
+
 class CostDetailsRequest(BaseModel):
     parking_cost: int | None = None
     utilities_estimate: int | None = None
@@ -513,6 +518,50 @@ def _decision_insight_for_location(
     }
 
 
+def _profile_compat_fields_for_apartment(
+    loc: Apartment,
+    units: list,
+    active_profile: dict | None,
+    decision_insight: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return compatibility fields for the profile-first scoring rollout."""
+    constraints = (active_profile or {}).get("constraints", {})
+    max_true_monthly = constraints.get("max_true_monthly")
+    min_bedrooms = constraints.get("min_bedrooms")
+
+    priced = [u.price_min for u in units if u.price_min is not None]
+    cheapest = min(priced) if priced else None
+    bedrooms = [u.bed for u in units if u.bed is not None]
+    max_known_bedrooms = max(bedrooms) if bedrooms else None
+
+    failed_constraints: list[str] = []
+    if max_true_monthly is not None and cheapest is not None and cheapest > max_true_monthly:
+        failed_constraints.append(f"Minimum known rent exceeds ${max_true_monthly:,}/mo")
+    if min_bedrooms is not None and max_known_bedrooms is not None and max_known_bedrooms < min_bedrooms:
+        failed_constraints.append(f"No floor plan meets {min_bedrooms}+ bedrooms")
+
+    if cheapest is None:
+        confidence = "low"
+        data_gaps = ["Missing floor-plan pricing"]
+    elif len(units) <= 1:
+        confidence = "medium"
+        data_gaps = ["Limited unit data"]
+    else:
+        confidence = "high"
+        data_gaps = []
+
+    return {
+        "profile_name": (active_profile or {}).get("name"),
+        "eligibility": {
+            "passed": len(failed_constraints) == 0,
+            "failed_constraints": failed_constraints,
+        },
+        "confidence": confidence,
+        "data_gaps": data_gaps,
+        "decision_insight": decision_insight,
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -532,6 +581,8 @@ async def api_locations(
             raise HTTPException(400, f"Unknown type '{type}'")
 
     async with get_db() as db:
+        await profiles_db.ensure_default_profile(db)
+        active_profile = await profiles_db.get_active_profile(db)
         all_locations = await list_all(db, None)  # fetch all types for scoring context
         commute_anchor = await get_setting(db, "commute_anchor")
         commute_anchors_setting = await get_setting(db, "commute_anchors")
@@ -555,10 +606,11 @@ async def api_locations(
                 d["units"] = [_unit_to_dict(u) for u in units]
                 d["available_count"] = sum(1 for u in units if u.available)
                 d["price_range"] = _format_price_range(unit_price_mins)
-                d["decision_insight"] = _decision_insight_for_location(
+                decision_insight = _decision_insight_for_location(
                     loc, units, commute_anchor, nearby_locs,
                     commute_anchors=commute_anchors_setting,
                 )
+                d.update(_profile_compat_fields_for_apartment(loc, units, active_profile, decision_insight))
                 if available and not any(u.available for u in units):
                     continue
                 if max_price is not None:
@@ -570,6 +622,7 @@ async def api_locations(
                     loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs,
                     commute_anchors=commute_anchors_setting,
                 )
+                d["profile_name"] = (active_profile or {}).get("name")
             result.append(d)
 
     return JSONResponse(result)
@@ -647,6 +700,8 @@ async def api_enrich_from_url(payload: UrlEnrichmentRequest) -> JSONResponse:
 @app.get("/api/locations/{loc_id}")
 async def api_location_detail(loc_id: int) -> JSONResponse:
     async with get_db() as db:
+        await profiles_db.ensure_default_profile(db)
+        active_profile = await profiles_db.get_active_profile(db)
         loc = await get_by_id(db, loc_id)
         if not loc:
             raise HTTPException(404, "Location not found")
@@ -665,15 +720,17 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
             units = await get_latest_units(db, loc.id)
             d["units"] = [_unit_to_dict(u) for u in units]
             d["available_count"] = sum(1 for u in units if u.available)
-            d["decision_insight"] = _decision_insight_for_location(
+            decision_insight = _decision_insight_for_location(
                 loc, units, commute_anchor, nearby_locs,
                 commute_anchors=commute_anchors_setting,
             )
+            d.update(_profile_compat_fields_for_apartment(loc, units, active_profile, decision_insight))
         else:
             d["decision_insight"] = _decision_insight_for_location(
                 loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs,
                 commute_anchors=commute_anchors_setting,
             )
+            d["profile_name"] = (active_profile or {}).get("name")
     return JSONResponse(d)
 
 
@@ -684,6 +741,38 @@ async def api_delete_location(loc_id: int) -> JSONResponse:
     if not deleted:
         raise HTTPException(404, "Location not found")
     return JSONResponse({"status": "deleted", "id": loc_id})
+
+
+# ── Decision profiles ────────────────────────────────────────────────────────
+
+@app.get("/api/profiles")
+async def api_list_profiles() -> JSONResponse:
+    async with get_db() as db:
+        profiles = await profiles_db.list_profiles(db)
+    return JSONResponse(profiles)
+
+
+@app.post("/api/profiles")
+async def api_create_profile(payload: ProfileCreateRequest) -> JSONResponse:
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(400, "Profile name is required")
+    async with get_db() as db:
+        try:
+            profile = await profiles_db.create_profile(db, name)
+        except Exception as exc:
+            raise HTTPException(400, "Profile name must be unique") from exc
+    return JSONResponse(profile, status_code=201)
+
+
+@app.post("/api/profiles/{profile_id}/activate")
+async def api_activate_profile(profile_id: int) -> JSONResponse:
+    async with get_db() as db:
+        ok = await profiles_db.set_active_profile(db, profile_id)
+        if not ok:
+            raise HTTPException(404, "Profile not found")
+        active = await profiles_db.get_active_profile(db)
+    return JSONResponse({"status": "ok", "active_profile": active})
 
 
 # ── Commute anchor settings ──────────────────────────────────────────────────
