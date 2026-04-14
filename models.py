@@ -39,7 +39,8 @@ class Unit(BaseModel):
 
     @property
     def size_display(self) -> str:
-        parts = [f"{self.bed}BD/{self.bath:.0f}BA"]
+        bath_display = f"{self.bath:g}"
+        parts = [f"{self.bed}BD/{bath_display}BA"]
         if self.sqft_min:
             if self.sqft_max and self.sqft_max != self.sqft_min:
                 parts.append(f"{self.sqft_min:,}–{self.sqft_max:,} sqft")
