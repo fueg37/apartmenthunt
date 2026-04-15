@@ -26,6 +26,7 @@ from db.settings import get_setting, set_setting, delete_setting
 import db.discoveries as disc_db
 import db.visits as visits_db
 import db.profiles as profiles_db
+import db.score_runs as score_runs_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
 from scoring.engine import compute_true_monthly_cost, score_apartment_profile_v1
 
@@ -596,6 +597,50 @@ def _profile_compat_fields_for_apartment(
     }
 
 
+async def _persist_score_run_if_needed(
+    db,
+    apartment_id: int,
+    profile_id: int | None,
+    score: int,
+    tier: str,
+    confidence: str | None,
+    eligibility_passed: bool,
+    breakdown_json: dict[str, Any],
+    reasons_json: list[str],
+) -> None:
+    """Persist score runs only when changed or when the latest run is stale."""
+    if not profile_id:
+        return
+
+    computed_at = datetime.utcnow().isoformat()
+    should_insert = await score_runs_db.should_insert_score_run(
+        db=db,
+        apartment_id=apartment_id,
+        profile_id=profile_id,
+        score=score,
+        tier=tier,
+        confidence=confidence,
+        eligibility_passed=eligibility_passed,
+        breakdown_json=breakdown_json,
+        reasons_json=reasons_json,
+        computed_at=computed_at,
+    )
+    if not should_insert:
+        return
+    await score_runs_db.insert_score_run(
+        db=db,
+        apartment_id=apartment_id,
+        profile_id=profile_id,
+        score=score,
+        tier=tier,
+        confidence=confidence,
+        eligibility_passed=eligibility_passed,
+        breakdown_json=breakdown_json,
+        reasons_json=reasons_json,
+        computed_at=computed_at,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -650,6 +695,17 @@ async def api_locations(
                     nearby_locs=nearby_locs,
                     profile=active_profile,
                     fallback_anchors=commute_anchors_setting,
+                )
+                await _persist_score_run_if_needed(
+                    db=db,
+                    apartment_id=loc.id,
+                    profile_id=(active_profile or {}).get("id"),
+                    score=decision.score,
+                    tier=decision.tier,
+                    confidence=decision.confidence,
+                    eligibility_passed=bool(decision.eligibility.get("passed", True)),
+                    breakdown_json=decision.components,
+                    reasons_json=decision.reasons,
                 )
                 d["decision_insight"] = decision.model_dump(
                     include={"score", "tier", "summary", "components", "reasons", "version"}
@@ -778,6 +834,17 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
                 profile=active_profile,
                 fallback_anchors=commute_anchors_setting,
             )
+            await _persist_score_run_if_needed(
+                db=db,
+                apartment_id=loc.id,
+                profile_id=(active_profile or {}).get("id"),
+                score=decision.score,
+                tier=decision.tier,
+                confidence=decision.confidence,
+                eligibility_passed=bool(decision.eligibility.get("passed", True)),
+                breakdown_json=decision.components,
+                reasons_json=decision.reasons,
+            )
             d["decision_insight"] = decision.model_dump(
                 include={"score", "tier", "summary", "components", "reasons", "version"}
             )
@@ -892,6 +959,17 @@ async def api_profile_score_preview(profile_id: int) -> JSONResponse:
                 nearby_locs=nearby_locs,
                 profile=profile,
             )
+            await _persist_score_run_if_needed(
+                db=db,
+                apartment_id=loc.id,
+                profile_id=profile_id,
+                score=result.score,
+                tier=result.tier,
+                confidence=result.confidence,
+                eligibility_passed=bool(result.eligibility.get("passed", True)),
+                breakdown_json=result.components,
+                reasons_json=result.reasons,
+            )
             out.append(
                 {
                     "location_id": loc.id,
@@ -905,6 +983,35 @@ async def api_profile_score_preview(profile_id: int) -> JSONResponse:
 
     out.sort(key=lambda x: x["score"], reverse=True)
     return JSONResponse({"profile_id": profile_id, "results": out})
+
+
+@app.get("/api/locations/{loc_id}/score-history")
+async def api_location_score_history(
+    loc_id: int,
+    profile_id: int = Query(...),
+    limit: int = Query(100, ge=1, le=500),
+) -> JSONResponse:
+    async with get_db() as db:
+        loc = await get_by_id(db, loc_id)
+        if not loc:
+            raise HTTPException(404, "Location not found")
+        profile = await profiles_db.get_profile_by_id(db, profile_id)
+        if not profile:
+            raise HTTPException(404, "Profile not found")
+        rows = await score_runs_db.list_score_history(
+            db=db,
+            apartment_id=loc_id,
+            profile_id=profile_id,
+            limit=limit,
+        )
+    return JSONResponse(
+        {
+            "location_id": loc_id,
+            "profile_id": profile_id,
+            "count": len(rows),
+            "runs": rows,
+        }
+    )
 
 
 # ── Commute anchor settings ──────────────────────────────────────────────────
