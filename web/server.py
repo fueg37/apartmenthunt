@@ -27,7 +27,7 @@ import db.discoveries as disc_db
 import db.visits as visits_db
 import db.profiles as profiles_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
-from scoring.engine import score_apartment_profile_v1
+from scoring.engine import compute_true_monthly_cost, score_apartment_profile_v1
 
 logger = logging.getLogger(__name__)
 
@@ -473,27 +473,18 @@ def _decision_insight_for_location(
         # Affordability (always included for apartments)
         unit_list = units or []
         priced = [u.price_min for u in unit_list if u.price_min is not None]
-        # Apply cost_details if user has filled them in
-        cost_details = loc.extra.get("cost_details", {}) if hasattr(loc, "extra") else {}
-        parking = int(cost_details.get("parking_cost") or 0)
-        utilities = int(cost_details.get("utilities_estimate") or 0)
-        pet_fee = int(cost_details.get("pet_fee") or 0)
-        amenity_fee = int(cost_details.get("amenity_fee") or 0)
-        concession_months = int(cost_details.get("concession_months") or 0)
-        lease_term = int(cost_details.get("lease_term_months") or 12) or 12
-        extras = parking + utilities + pet_fee + amenity_fee
-
         if priced:
             cheapest = min(priced)
-            # Compute true monthly cost if extras are filled in
-            true_monthly = cheapest + extras
-            if concession_months > 0:
-                true_monthly -= int(cheapest * concession_months / lease_term)
-            true_monthly = max(0, true_monthly)
-            target_budget = 3500 + extras  # scale budget to match true cost
+            cost_snapshot = compute_true_monthly_cost(
+                cheapest,
+                loc.extra.get("cost_details", {}) if hasattr(loc, "extra") else {},
+            )
+            true_monthly = cost_snapshot["true_monthly"] if cost_snapshot else cheapest
+            recurring_fees = cost_snapshot["recurring_fees"] if cost_snapshot else 0
+            target_budget = 3500 + recurring_fees  # scale budget to match true cost
             ratio = (true_monthly - 1800) / max(1, target_budget - 1800)
             components["affordability"] = _clamp((1.0 - math.sqrt(max(0.0, ratio))) * 100.0)
-            if extras:
+            if recurring_fees:
                 reasons.append(f"All-in ~${true_monthly:,}/mo (rent ${cheapest:,} + extras)")
             else:
                 reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
@@ -573,8 +564,13 @@ def _profile_compat_fields_for_apartment(
     max_known_bedrooms = max(bedrooms) if bedrooms else None
 
     failed_constraints: list[str] = []
-    if max_true_monthly is not None and cheapest is not None and cheapest > max_true_monthly:
-        failed_constraints.append(f"Minimum known rent exceeds ${max_true_monthly:,}/mo")
+    cost_snapshot = compute_true_monthly_cost(
+        cheapest,
+        loc.extra.get("cost_details", {}) if hasattr(loc, "extra") else {},
+    )
+    true_monthly = cost_snapshot["true_monthly"] if cost_snapshot else None
+    if max_true_monthly is not None and true_monthly is not None and true_monthly > max_true_monthly:
+        failed_constraints.append(f"True monthly cost exceeds ${max_true_monthly:,}/mo")
     if min_bedrooms is not None and max_known_bedrooms is not None and max_known_bedrooms < min_bedrooms:
         failed_constraints.append(f"No floor plan meets {min_bedrooms}+ bedrooms")
 

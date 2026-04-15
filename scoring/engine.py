@@ -39,6 +39,40 @@ def _normalize_weights(raw: dict[str, float]) -> dict[str, float]:
     return {k: v / total for k, v in cleaned.items()}
 
 
+def _to_nonnegative_int(value: Any, default: int = 0) -> int:
+    try:
+        return max(0, int(float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def compute_true_monthly_cost(base_rent: int | None, cost_details: dict[str, Any] | None) -> dict[str, int] | None:
+    """Compute all-in monthly cost from base rent and recurring/apportioned fees."""
+    if base_rent is None:
+        return None
+
+    details = cost_details or {}
+    parking = _to_nonnegative_int(details.get("parking_cost"))
+    utilities = _to_nonnegative_int(details.get("utilities_estimate"))
+    pet_fee = _to_nonnegative_int(details.get("pet_fee"))
+    amenity_fee = _to_nonnegative_int(details.get("amenity_fee"))
+    concession_months = _to_nonnegative_int(details.get("concession_months"))
+    lease_term_months = _to_nonnegative_int(details.get("lease_term_months"), default=12) or 12
+
+    recurring_fees = parking + utilities + pet_fee + amenity_fee
+    concession_discount = int(round(base_rent * concession_months / lease_term_months)) if concession_months > 0 else 0
+    true_monthly = max(0, base_rent + recurring_fees - concession_discount)
+
+    return {
+        "base_rent": base_rent,
+        "true_monthly": true_monthly,
+        "recurring_fees": recurring_fees,
+        "concession_discount": concession_discount,
+        "lease_term_months": lease_term_months,
+        "concession_months": concession_months,
+    }
+
+
 def _expected_commute_score(apartment: Apartment, scenarios: list[dict[str, Any]]) -> tuple[float, int | None]:
     if not apartment.lat or not apartment.lon or not scenarios:
         return 50.0, None
@@ -68,14 +102,16 @@ def score_apartment_profile_v1(
 
     priced = [u.price_min for u in units if u.price_min is not None]
     cheapest = min(priced) if priced else None
+    cost_snapshot = compute_true_monthly_cost(cheapest, (apartment.extra or {}).get("cost_details"))
+    true_monthly = cost_snapshot["true_monthly"] if cost_snapshot else None
     max_bed = max([u.bed for u in units if u.bed is not None], default=None)
     subtype = (apartment.extra or {}).get("subtype")
     amenities = (apartment.extra or {}).get("amenities", [])
 
     failed: list[str] = []
     max_true_monthly = constraints.get("max_true_monthly")
-    if max_true_monthly is not None and cheapest is not None and cheapest > max_true_monthly:
-        failed.append(f"Minimum known rent exceeds ${int(max_true_monthly):,}/mo")
+    if max_true_monthly is not None and true_monthly is not None and true_monthly > max_true_monthly:
+        failed.append(f"True monthly cost exceeds ${int(max_true_monthly):,}/mo")
     min_bedrooms = constraints.get("min_bedrooms")
     if min_bedrooms is not None and max_bed is not None and max_bed < min_bedrooms:
         failed.append(f"No floor plan meets {int(min_bedrooms)}+ bedrooms")
@@ -98,10 +134,14 @@ def score_apartment_profile_v1(
         components["affordability"] = 45.0
         data_gaps.append("Missing floor-plan pricing")
     else:
+        effective_monthly = float(true_monthly if true_monthly is not None else cheapest)
         target = float(max_true_monthly or 3500)
-        ratio = (cheapest - 1800) / max(1.0, target - 1800)
+        ratio = (effective_monthly - 1800) / max(1.0, target - 1800)
         components["affordability"] = _clamp((1.0 - math.sqrt(max(0.0, ratio))) * 100.0)
-        reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
+        if true_monthly is not None:
+            reasons.append(f"Base rent ${cheapest:,}/mo · True monthly ${true_monthly:,}/mo")
+        else:
+            reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
 
     # commute expected utility
     commute_score, expected_mins = _expected_commute_score(apartment, commute_scenarios)
