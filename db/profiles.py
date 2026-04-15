@@ -79,8 +79,7 @@ async def list_profiles(db: aiosqlite.Connection) -> list[dict[str, Any]]:
         """
     )
     rows = await cur.fetchall()
-    profile_ids = [r["id"] for r in rows]
-    commute_scenarios_by_profile = await list_profile_commute_scenarios_for_profiles(db, profile_ids)
+    commute_scenarios_by_profile = await _group_commute_scenarios_for_profile_rows(db, rows)
     out: list[dict[str, Any]] = []
     for r in rows:
         profile_id = r["id"]
@@ -188,6 +187,24 @@ async def list_profile_commute_scenarios(db: aiosqlite.Connection, profile_id: i
 
 
 async def list_profile_commute_scenarios_for_profiles(
+    db: aiosqlite.Connection,
+    profile_ids: list[int],
+) -> dict[int, list[dict[str, Any]]]:
+    if not profile_ids:
+        return {}
+
+    return await _fetch_commute_scenarios_grouped(db, profile_ids)
+
+
+async def _group_commute_scenarios_for_profile_rows(
+    db: aiosqlite.Connection,
+    profile_rows: list[aiosqlite.Row],
+) -> dict[int, list[dict[str, Any]]]:
+    profile_ids = [r["id"] for r in profile_rows]
+    return await _fetch_commute_scenarios_grouped(db, profile_ids)
+
+
+async def _fetch_commute_scenarios_grouped(
     db: aiosqlite.Connection,
     profile_ids: list[int],
 ) -> dict[int, list[dict[str, Any]]]:
