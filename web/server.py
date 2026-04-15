@@ -905,7 +905,7 @@ async def api_update_profile(profile_id: int, payload: ProfilePatchRequest) -> J
         else None
     )
     commute_scenarios = (
-        [s.model_dump() for s in payload.commute_scenarios]
+        [s.model_dump(exclude_unset=True, exclude_none=True) for s in payload.commute_scenarios]
         if payload.commute_scenarios is not None
         else None
     )
