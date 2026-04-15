@@ -6,7 +6,7 @@ import logging
 import math
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
@@ -609,11 +609,7 @@ async def _persist_score_run_if_needed(
     reasons_json: list[str],
 ) -> None:
     """Persist score runs only when changed or when the latest run is stale."""
-    if not profile_id:
-        return
-
-    computed_at = datetime.utcnow().isoformat()
-    should_insert = await score_runs_db.should_insert_score_run(
+    await score_runs_db.save_score_run_if_changed(
         db=db,
         apartment_id=apartment_id,
         profile_id=profile_id,
@@ -623,21 +619,6 @@ async def _persist_score_run_if_needed(
         eligibility_passed=eligibility_passed,
         breakdown_json=breakdown_json,
         reasons_json=reasons_json,
-        computed_at=computed_at,
-    )
-    if not should_insert:
-        return
-    await score_runs_db.insert_score_run(
-        db=db,
-        apartment_id=apartment_id,
-        profile_id=profile_id,
-        score=score,
-        tier=tier,
-        confidence=confidence,
-        eligibility_passed=eligibility_passed,
-        breakdown_json=breakdown_json,
-        reasons_json=reasons_json,
-        computed_at=computed_at,
     )
 
 
@@ -990,26 +971,35 @@ async def api_location_score_history(
     loc_id: int,
     profile_id: int = Query(...),
     limit: int = Query(100, ge=1, le=500),
+    include_diffs: bool = Query(True),
 ) -> JSONResponse:
     async with get_db() as db:
         loc = await get_by_id(db, loc_id)
         if not loc:
             raise HTTPException(404, "Location not found")
+        if not isinstance(loc, Apartment):
+            raise HTTPException(400, "Score history is only available for apartment locations")
+
         profile = await profiles_db.get_profile_by_id(db, profile_id)
         if not profile:
             raise HTTPException(404, "Profile not found")
+
         rows = await score_runs_db.list_score_history(
             db=db,
             apartment_id=loc_id,
             profile_id=profile_id,
             limit=limit,
         )
+
+    runs = score_runs_db.with_score_history_diffs(rows) if include_diffs else rows
     return JSONResponse(
         {
             "location_id": loc_id,
+            "location_name": loc.name,
             "profile_id": profile_id,
-            "count": len(rows),
-            "runs": rows,
+            "profile_name": profile.get("name"),
+            "count": len(runs),
+            "runs": runs,
         }
     )
 
