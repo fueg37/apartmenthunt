@@ -94,6 +94,37 @@
       flex-wrap: wrap;
       gap: 6px;
     }
+    .profile-panel {
+      width: 100%;
+      background: #efe5d4;
+      border: 1px solid #d4c8b4;
+      border-radius: 9px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .profile-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .profile-head label { font-size: .7rem; font-weight: 700; letter-spacing: .5px; color: var(--bark); text-transform: uppercase; }
+    .profile-select { width: 100%; font-size: .76rem; border: 1px solid #ccbca3; border-radius: 6px; padding: 5px 7px; background: #fff; }
+    .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 6px; }
+    .profile-field label { display:block; font-size:.64rem; color:var(--bark); margin-bottom:2px; }
+    .profile-field input, .profile-field textarea {
+      width: 100%; border: 1px solid #ccbca3; border-radius: 6px; background: #fff;
+      padding: 4px 6px; font-size: .73rem;
+    }
+    .profile-field.full { grid-column: 1 / -1; }
+    .profile-weight-row { display: grid; grid-template-columns: 1fr 40px; align-items: center; gap: 6px; }
+    .profile-weight-row span { font-size: .65rem; color: var(--bark); text-align: right; }
+    .scenario-editor { background: #f8f4ec; border: 1px solid #d8c8a8; border-radius: 7px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .scenario-row { display: grid; grid-template-columns: 1fr 58px; gap: 5px; align-items: center; }
+    .scenario-row-name { font-size: .69rem; color: var(--dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scenario-row input { width: 100%; border: 1px solid #ccbca3; border-radius: 5px; padding: 3px 4px; font-size: .7rem; text-align: right; background: #fff; }
+    .scenario-empty { font-size: .68rem; color: var(--bark); font-style: italic; }
+    .profile-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .profile-save-btn { background: var(--bark); color: var(--cream); border: none; border-radius: 6px; padding: 5px 10px; font-size: .72rem; font-weight: 600; cursor: pointer; }
+    .profile-save-btn.secondary { background: #fff; color: var(--bark); border: 1px solid #c8b89d; }
+    .profile-note { font-size: .64rem; color: var(--bark); }
     .filter-btn {
       padding: 4px 10px;
       border-radius: 14px;
@@ -662,6 +693,18 @@
     .hosp-drive-filter-row input[type=range] { flex: 1; min-width: 80px; max-width: 130px; }
     .hosp-drive-filter-row span { white-space: nowrap; min-width: 32px; }
     .commute-time-badge { font-size: .67rem; color: var(--blue); font-weight: 600; margin-top: 2px; }
+    .eligibility-badge { font-size: .62rem; padding: 2px 7px; border-radius: 9px; font-weight: 700; letter-spacing: .25px; }
+    .eligibility-badge.pass { background: #d8f0df; color: #276843; border: 1px solid #a8d8b8; }
+    .eligibility-badge.fail { background: #f8dfda; color: #8a3a30; border: 1px solid #e5b4ad; }
+    .confidence-badge { font-size: .62rem; padding: 2px 7px; border-radius: 9px; font-weight: 700; text-transform: uppercase; }
+    .confidence-badge.high { background: #deefe7; color: #2f7456; }
+    .confidence-badge.medium { background: #f6eccf; color: #7a5a14; }
+    .confidence-badge.low { background: #f6dfd8; color: #8a3a30; }
+    .data-gap-hint { font-size: .66rem; color: #8a4040; margin-top: 3px; }
+    .detail-dq-box { background: #fbf3e6; border: 1px solid #ead8b8; border-radius: 8px; padding: 8px 10px; margin: 10px 0; }
+    .detail-dq-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+    .prompt-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+    .prompt-item { font-size: .72rem; color: var(--dark); background: #fff; border: 1px solid #e3d3b8; border-radius: 6px; padding: 4px 6px; }
 
     /* ── Mobile tab bar (hidden on desktop) ── */
     #mobile-tabs { display: none; }
@@ -743,6 +786,31 @@
       <button class="filter-btn" data-type="available" onclick="setFilter(this,'available')">Available Now</button>
       <button class="filter-btn" data-type="shortlisted" onclick="setFilter(this,'shortlisted')">❤ Shortlisted</button>
       <button class="filter-btn" id="discover-tab-btn" onclick="toggleDiscoverPanel(this)">Discover <span class="filter-badge" id="inbox-badge" style="display:none">0</span></button>
+      <div class="profile-panel">
+        <div class="profile-head">
+          <label>Decision Profile</label>
+          <button class="profile-save-btn secondary" type="button" onclick="createProfilePrompt()">+ New</button>
+        </div>
+        <select id="profile-select" class="profile-select" onchange="activateProfile(this.value)"></select>
+        <div class="profile-grid">
+          <div class="profile-field"><label>Max all-in $/mo</label><input type="number" id="profile-max-true-monthly" min="0" placeholder="No cap" /></div>
+          <div class="profile-field"><label>Max expected commute</label><input type="number" id="profile-max-commute" min="1" placeholder="No cap" /></div>
+          <div class="profile-field"><label>Min bedrooms</label><input type="number" id="profile-min-bedrooms" min="0" step="1" placeholder="Any" /></div>
+          <div class="profile-field full"><label>Required subtypes (comma)</label><input type="text" id="profile-required-subtypes" placeholder="townhome, condo" /></div>
+          <div class="profile-field full"><label>Required amenities (comma)</label><input type="text" id="profile-required-amenities" placeholder="parking, washer_dryer" /></div>
+          <div class="profile-field full"><label>Weights (0–100)</label>
+            <div id="profile-weights-wrap"></div>
+          </div>
+          <div class="profile-field full"><label>Commute scenario probabilities (%)</label>
+            <div id="profile-scenarios" class="scenario-editor"></div>
+          </div>
+        </div>
+        <div class="profile-actions">
+          <button class="profile-save-btn" type="button" onclick="saveProfileEdits()">Save profile</button>
+          <button class="profile-save-btn secondary" type="button" onclick="loadProfiles()">Reset</button>
+        </div>
+        <div class="profile-note">Scenarios are normalized automatically if total probability ≠ 100%.</div>
+      </div>
       <div class="price-filter">
         <label>Max $/mo:</label>
         <input type="number" id="max-price-input" placeholder="3500" min="1000" max="10000" step="100"
@@ -961,6 +1029,8 @@ let commuteMarkers = {};           // {anchorId: Leaflet marker}
 let requiredAmenities = new Set(); // amenity keys that must be present
 let activeSubtypes = new Set();    // subtype filter (empty = all)
 let maxHospitalDriveMins = Infinity; // filter: max drive time from hospital to nearest apartment
+let profiles = [];
+let activeProfileId = null;
 
 const AMENITY_LABELS = {
   parking: 'Parking', pool: 'Pool', gym: 'Gym on-site', washer_dryer: 'In-unit W/D',
@@ -974,6 +1044,22 @@ const POI_CATEGORY_EMOJI = {
 const POI_CATEGORY_LABEL = {
   grocery: 'Grocery', beach: 'Beach', park: 'Park', pharmacy: 'Pharmacy',
   restaurant: 'Restaurant', retail: 'Retail', coworking: 'Coworking', library: 'Library', other: 'POI',
+};
+const PROFILE_WEIGHT_KEYS = [
+  ['affordability', 'Affordability'],
+  ['commute', 'Commute'],
+  ['type_fit', 'Type fit'],
+  ['space', 'Space'],
+  ['amenities', 'Amenities'],
+  ['proximity', 'Proximity'],
+  ['quality', 'Quality'],
+];
+const DATA_GAP_ACTIONS = {
+  'Missing floor-plan pricing': 'Add manual floor plans or run Refresh Data.',
+  'Limited unit data': 'Add at least one representative floor plan.',
+  'Missing commute scenarios': 'Set commute anchors or profile commute scenarios.',
+  'Missing bedroom metadata': 'Add bedroom counts in manual floor plans.',
+  'Missing rating data': 'Use the rating editor to add rating and review count.',
 };
 
 // ── Map init ────────────────────────────────────────────────────────────────
@@ -1023,6 +1109,142 @@ async function loadChanges() {
     changes.slice(0, 5).map(c =>
       `${c.location_name} · ${c.field}: ${c.old_value || '–'} → <span>${c.new_value || '–'}</span>`
     ).join('  |  ');
+}
+
+async function loadProfiles() {
+  try {
+    const res = await fetch('/api/profiles');
+    if (!res.ok) throw new Error('Could not load profiles');
+    profiles = await res.json();
+    const active = profiles.find(p => p.is_active) || profiles[0] || null;
+    activeProfileId = active?.id || null;
+    renderProfileEditor(active);
+  } catch (e) {
+    console.error('loadProfiles failed', e);
+  }
+}
+
+function renderProfileEditor(profile) {
+  const select = document.getElementById('profile-select');
+  const weightsWrap = document.getElementById('profile-weights-wrap');
+  const scenariosWrap = document.getElementById('profile-scenarios');
+  if (!select || !weightsWrap || !scenariosWrap) return;
+
+  if (!profiles.length) {
+    select.innerHTML = '<option>No profiles</option>';
+    return;
+  }
+  select.innerHTML = profiles.map(p =>
+    `<option value="${p.id}" ${p.id === profile?.id ? 'selected' : ''}>${escHtml(p.name)}${p.is_active ? ' · Active' : ''}</option>`
+  ).join('');
+
+  const constraints = profile?.constraints || {};
+  const weights = profile?.weights || {};
+  document.getElementById('profile-max-true-monthly').value = constraints.max_true_monthly ?? '';
+  document.getElementById('profile-max-commute').value = constraints.max_expected_commute_mins ?? '';
+  document.getElementById('profile-min-bedrooms').value = constraints.min_bedrooms ?? '';
+  document.getElementById('profile-required-subtypes').value = (constraints.required_subtypes || []).join(', ');
+  document.getElementById('profile-required-amenities').value = (constraints.required_amenities || []).join(', ');
+
+  weightsWrap.innerHTML = PROFILE_WEIGHT_KEYS.map(([key, label]) => {
+    const pct = Math.round((weights[key] || 0) * 100);
+    return `<div class="profile-weight-row">
+      <label style="font-size:.66rem;color:var(--bark)">${label}</label>
+      <span id="weight-label-${key}">${pct}</span>
+      <input type="range" min="0" max="100" value="${pct}" id="weight-input-${key}"
+        oninput="document.getElementById('weight-label-${key}').textContent=this.value" style="grid-column:1 / -1" />
+    </div>`;
+  }).join('');
+
+  const scenarios = profile?.commute_scenarios || [];
+  scenariosWrap.innerHTML = scenarios.length
+    ? scenarios.map((s, idx) => `<div class="scenario-row">
+        <div class="scenario-row-name" title="${escHtml(s.name)}">${escHtml(s.name || `Scenario ${idx + 1}`)}</div>
+        <input type="number" min="0" max="100" step="1" value="${Math.round((s.probability || 0) * 100)}" data-scenario-id="${s.id}" />
+      </div>`).join('')
+    : '<div class="scenario-empty">No saved scenarios for this profile yet.</div>';
+}
+
+async function activateProfile(profileId) {
+  if (!profileId) return;
+  try {
+    await fetch(`/api/profiles/${profileId}/activate`, { method: 'POST' });
+    await loadProfiles();
+    await loadLocations();
+    if (activeId) {
+      const loc = allLocations.find(l => l.id === activeId);
+      if (loc) renderDetail(loc);
+    }
+  } catch (e) {
+    alert('Could not activate profile');
+  }
+}
+
+function createProfilePrompt() {
+  const name = prompt('New profile name');
+  if (!name || !name.trim()) return;
+  createProfile(name.trim());
+}
+
+async function createProfile(name) {
+  try {
+    const res = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error('Name already exists or invalid');
+    const created = await res.json();
+    await activateProfile(created.id);
+  } catch (e) {
+    alert(`Could not create profile: ${e.message}`);
+  }
+}
+
+async function saveProfileEdits() {
+  const profileId = parseInt(document.getElementById('profile-select')?.value, 10);
+  if (!profileId) return;
+  const constraints = {
+    max_true_monthly: parseInt(document.getElementById('profile-max-true-monthly').value, 10) || null,
+    max_expected_commute_mins: parseInt(document.getElementById('profile-max-commute').value, 10) || null,
+    min_bedrooms: parseInt(document.getElementById('profile-min-bedrooms').value, 10) || null,
+    required_subtypes: (document.getElementById('profile-required-subtypes').value || '')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+    required_amenities: (document.getElementById('profile-required-amenities').value || '')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+  };
+  const weights = Object.fromEntries(PROFILE_WEIGHT_KEYS.map(([key]) => {
+    const pct = parseFloat(document.getElementById(`weight-input-${key}`)?.value || '0');
+    return [key, Math.max(0, pct) / 100];
+  }));
+  const scenarioInputs = [...document.querySelectorAll('#profile-scenarios input[data-scenario-id]')];
+  let commute_scenarios = [];
+  if (scenarioInputs.length) {
+    let total = scenarioInputs.reduce((sum, el) => sum + Math.max(0, parseFloat(el.value || '0')), 0);
+    if (!total) total = 100;
+    const activeProfile = profiles.find(p => p.id === profileId);
+    commute_scenarios = (activeProfile?.commute_scenarios || []).map(s => {
+      const el = scenarioInputs.find(i => String(i.dataset.scenarioId) === String(s.id));
+      const pct = Math.max(0, parseFloat(el?.value || '0'));
+      return { name: s.name, lat: s.lat, lon: s.lon, probability: pct / total };
+    });
+  }
+  try {
+    const res = await fetch(`/api/profiles/${profileId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ constraints, weights, commute_scenarios }),
+    });
+    if (!res.ok) throw new Error('Save failed');
+    await loadProfiles();
+    await loadLocations();
+    if (activeId) {
+      const loc = allLocations.find(l => l.id === activeId);
+      if (loc) renderDetail(loc);
+    }
+  } catch (e) {
+    alert(`Could not save profile: ${e.message}`);
+  }
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
@@ -1109,6 +1331,15 @@ function renderCards() {
     const decisionHtml = loc.location_type === 'apartment' && loc.decision_insight
       ? `<span class="decision-chip" data-tier="${loc.decision_insight.tier}">Score ${loc.decision_insight.score}<small>${loc.decision_insight.summary}</small></span>`
       : '';
+    const eligibilityHtml = loc.location_type === 'apartment' && loc.eligibility
+      ? `<span class="eligibility-badge ${loc.eligibility.passed ? 'pass' : 'fail'}">${loc.eligibility.passed ? 'Eligible' : 'Blocked'}</span>`
+      : '';
+    const confidenceHtml = loc.location_type === 'apartment' && loc.confidence
+      ? `<span class="confidence-badge ${loc.confidence}">${loc.confidence}</span>`
+      : '';
+    const dataGapHint = loc.location_type === 'apartment' && Array.isArray(loc.data_gaps) && loc.data_gaps.length
+      ? `<div class="data-gap-hint">Needs data: ${escHtml(loc.data_gaps[0])}</div>`
+      : '';
 
     // Amenity pills (top 4)
     const amenityPills = (loc.amenities || []).slice(0, 4)
@@ -1170,10 +1401,13 @@ function renderCards() {
         ${subtypeBadge}
         ${loc.is_top_pick ? '<span class="badge badge-top">TOP PICK</span>' : ''}
         ${decisionHtml}
+        ${eligibilityHtml}
+        ${confidenceHtml}
         <span class="card-rating" ${loc.location_type === 'hospital' ? 'style="opacity:0.45;font-size:0.78em"' : ''}>${loc.rating ? '⭐ ' + loc.rating.toFixed(1) : ''}</span>
       </div>
       ${priceHtml}
       ${amenityPillsHtml}
+      ${dataGapHint}
       ${commuteHtml}
       ${hospAptHtml}
       ${verdictHtml}
@@ -1233,6 +1467,7 @@ function renderDetail(loc) {
 
   // ISP display
   const ispHtml = buildISPSection(loc);
+  const dataQualityHtml = buildDataQualitySection(loc);
 
   // Units table
   let unitsHtml = '';
@@ -1318,6 +1553,7 @@ function renderDetail(loc) {
       </div>
     </div>
     <div class="detail-address">${loc.address}</div>
+    ${loc.location_type === 'apartment' && loc.profile_name ? `<div style="font-size:.68rem;color:var(--bark);margin-bottom:8px">Profile: <strong>${escHtml(loc.profile_name)}</strong></div>` : ''}
     ${decision ? `<div class="detail-score-box" data-tier="${decision.tier}">
       <div class="detail-score-title">Decision Score · ${decision.version}</div>
       <div class="detail-score-line"><strong>${decision.score}</strong>/100 · ${decision.summary}</div>
@@ -1350,6 +1586,7 @@ function renderDetail(loc) {
       <button class="tiny-btn" onclick="saveRating(${loc.id})">Save</button>
     </div>
     ${loc.notes ? `<div class="detail-notes">${loc.notes}</div>` : ''}
+    ${dataQualityHtml}
     ${prosConsHtml}
     ${visitLogHtml}
     ${unitsHtml}
@@ -1424,6 +1661,27 @@ function buildProximity(loc) {
         <span class="prox-time">~${mins} min drive</span>
       </div>`;
     }).join('');
+}
+
+function buildDataQualitySection(loc) {
+  if (loc.location_type !== 'apartment') return '';
+  const eligibility = loc.eligibility || null;
+  const confidence = ['high','medium','low'].includes(loc.confidence) ? loc.confidence : 'medium';
+  const dataGaps = Array.isArray(loc.data_gaps) ? loc.data_gaps : [];
+  const failed = eligibility?.failed_constraints || [];
+  const prompts = dataGaps.map(g => DATA_GAP_ACTIONS[g] || `Action needed: ${g}`);
+  return `
+    <div class="detail-dq-box">
+      <div class="section-title" style="margin:0 0 4px">Eligibility & Confidence</div>
+      <div class="detail-dq-row">
+        ${eligibility ? `<span class="eligibility-badge ${eligibility.passed ? 'pass' : 'fail'}">${eligibility.passed ? 'Eligible for current profile' : 'Blocked by profile constraints'}</span>` : ''}
+        <span class="confidence-badge ${confidence}">${confidence} confidence</span>
+      </div>
+      ${failed.length ? `<div style="font-size:.74rem;color:#8a4040">${failed.map(f => `• ${escHtml(f)}`).join('<br>')}</div>` : ''}
+      ${dataGaps.length ? `<div style="font-size:.74rem;color:var(--bark);margin-top:5px"><b>Data gaps</b>: ${dataGaps.map(escHtml).join(' · ')}</div>` : '<div style="font-size:.73rem;color:var(--bark)">No critical data gaps detected.</div>'}
+      ${prompts.length ? `<div class="prompt-list">${prompts.map(p => `<div class="prompt-item">→ ${escHtml(p)}</div>`).join('')}</div>` : ''}
+    </div>
+  `;
 }
 
 function nearestN(from, candidates, n) {
@@ -2782,6 +3040,7 @@ if (window.innerWidth <= 768) {
 initMap();
 addAnchors();
 loadLocations();
+loadProfiles();
 loadChanges();
 updateInboxBadge();
 loadCommuteAnchor();
