@@ -831,8 +831,16 @@ async def api_create_profile(payload: ProfileCreateRequest) -> JSONResponse:
 
 @app.patch("/api/profiles/{profile_id}")
 async def api_update_profile(profile_id: int, payload: ProfilePatchRequest) -> JSONResponse:
-    constraints = payload.constraints.model_dump() if payload.constraints else None
-    weights = payload.weights.model_dump() if payload.weights else None
+    constraints = (
+        payload.constraints.model_dump(exclude_unset=True, exclude_none=True)
+        if payload.constraints
+        else None
+    )
+    weights = (
+        payload.weights.model_dump(exclude_unset=True, exclude_none=True)
+        if payload.weights
+        else None
+    )
     commute_scenarios = (
         [s.model_dump() for s in payload.commute_scenarios]
         if payload.commute_scenarios is not None

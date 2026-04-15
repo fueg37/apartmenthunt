@@ -217,6 +217,36 @@ async def update_profile(
         return None
 
     if constraints is not None:
+        cur = await db.execute(
+            """
+            SELECT max_true_monthly, max_expected_commute_mins, min_bedrooms,
+                   required_subtypes_json, required_amenities_json
+            FROM profile_constraints
+            WHERE profile_id=?
+            """,
+            (profile_id,),
+        )
+        existing_constraints = await cur.fetchone()
+        merged_constraints = {
+            "max_true_monthly": (
+                existing_constraints["max_true_monthly"] if existing_constraints else None
+            ),
+            "max_expected_commute_mins": (
+                existing_constraints["max_expected_commute_mins"] if existing_constraints else None
+            ),
+            "min_bedrooms": existing_constraints["min_bedrooms"] if existing_constraints else None,
+            "required_subtypes": (
+                _loads_json_list(existing_constraints["required_subtypes_json"])
+                if existing_constraints
+                else []
+            ),
+            "required_amenities": (
+                _loads_json_list(existing_constraints["required_amenities_json"])
+                if existing_constraints
+                else []
+            ),
+        }
+        merged_constraints.update(constraints)
         await db.execute(
             """
             UPDATE profile_constraints
@@ -228,16 +258,36 @@ async def update_profile(
              WHERE profile_id=?
             """,
             (
-                constraints.get("max_true_monthly"),
-                constraints.get("max_expected_commute_mins"),
-                constraints.get("min_bedrooms"),
-                json.dumps(constraints.get("required_subtypes", [])),
-                json.dumps(constraints.get("required_amenities", [])),
+                merged_constraints["max_true_monthly"],
+                merged_constraints["max_expected_commute_mins"],
+                merged_constraints["min_bedrooms"],
+                json.dumps(merged_constraints["required_subtypes"]),
+                json.dumps(merged_constraints["required_amenities"]),
                 profile_id,
             ),
         )
 
     if weights is not None:
+        cur = await db.execute(
+            """
+            SELECT affordability_w, commute_w, type_fit_w, space_w,
+                   amenities_w, proximity_w, quality_w
+            FROM profile_weights
+            WHERE profile_id=?
+            """,
+            (profile_id,),
+        )
+        existing_weights = await cur.fetchone()
+        merged_weights = {
+            "affordability": existing_weights["affordability_w"] if existing_weights else 0.0,
+            "commute": existing_weights["commute_w"] if existing_weights else 0.0,
+            "type_fit": existing_weights["type_fit_w"] if existing_weights else 0.0,
+            "space": existing_weights["space_w"] if existing_weights else 0.0,
+            "amenities": existing_weights["amenities_w"] if existing_weights else 0.0,
+            "proximity": existing_weights["proximity_w"] if existing_weights else 0.0,
+            "quality": existing_weights["quality_w"] if existing_weights else 0.0,
+        }
+        merged_weights.update(weights)
         await db.execute(
             """
             UPDATE profile_weights
@@ -251,13 +301,13 @@ async def update_profile(
              WHERE profile_id=?
             """,
             (
-                weights.get("affordability", 0.0),
-                weights.get("commute", 0.0),
-                weights.get("type_fit", 0.0),
-                weights.get("space", 0.0),
-                weights.get("amenities", 0.0),
-                weights.get("proximity", 0.0),
-                weights.get("quality", 0.0),
+                merged_weights["affordability"],
+                merged_weights["commute"],
+                merged_weights["type_fit"],
+                merged_weights["space"],
+                merged_weights["amenities"],
+                merged_weights["proximity"],
+                merged_weights["quality"],
                 profile_id,
             ),
         )
