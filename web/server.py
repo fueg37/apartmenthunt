@@ -622,6 +622,22 @@ async def _persist_score_run_if_needed(
     )
 
 
+async def _get_active_profile_with_commute_scenarios(
+    db,
+) -> dict[str, Any] | None:
+    await profiles_db.ensure_default_profile(db)
+    active_profile = await profiles_db.get_active_profile(db)
+    if not active_profile or not active_profile.get("id"):
+        return active_profile
+
+    grouped_scenarios = await profiles_db.list_profile_commute_scenarios_for_profiles(
+        db,
+        [active_profile["id"]],
+    )
+    active_profile["commute_scenarios"] = grouped_scenarios.get(active_profile["id"], [])
+    return active_profile
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -641,12 +657,7 @@ async def api_locations(
             raise HTTPException(400, f"Unknown type '{type}'")
 
     async with get_db() as db:
-        await profiles_db.ensure_default_profile(db)
-        active_profile = await profiles_db.get_active_profile(db)
-        if active_profile and active_profile.get("id"):
-            active_profile["commute_scenarios"] = (
-                await profiles_db.list_profile_commute_scenarios(db, active_profile["id"])
-            )
+        active_profile = await _get_active_profile_with_commute_scenarios(db)
         all_locations = await list_all(db, None)  # fetch all types for scoring context
         commute_anchor = await get_setting(db, "commute_anchor")
         commute_anchors_setting = await get_setting(db, "commute_anchors")
@@ -784,12 +795,7 @@ async def api_enrich_from_url(payload: UrlEnrichmentRequest) -> JSONResponse:
 @app.get("/api/locations/{loc_id}")
 async def api_location_detail(loc_id: int) -> JSONResponse:
     async with get_db() as db:
-        await profiles_db.ensure_default_profile(db)
-        active_profile = await profiles_db.get_active_profile(db)
-        if active_profile and active_profile.get("id"):
-            active_profile["commute_scenarios"] = (
-                await profiles_db.list_profile_commute_scenarios(db, active_profile["id"])
-            )
+        active_profile = await _get_active_profile_with_commute_scenarios(db)
         loc = await get_by_id(db, loc_id)
         if not loc:
             raise HTTPException(404, "Location not found")
@@ -927,7 +933,8 @@ async def api_profile_score_preview(profile_id: int) -> JSONResponse:
                 l.category == "grocery" or (l.weight or 0.0) >= 0.5
             ))
         ]
-        profile["commute_scenarios"] = await profiles_db.list_profile_commute_scenarios(db, profile_id)
+        grouped_scenarios = await profiles_db.list_profile_commute_scenarios_for_profiles(db, [profile_id])
+        profile["commute_scenarios"] = grouped_scenarios.get(profile_id, [])
 
         out: list[dict[str, Any]] = []
         for loc in all_locations:
