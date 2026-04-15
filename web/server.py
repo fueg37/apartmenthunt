@@ -388,6 +388,10 @@ def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, value))
 
 
+def _has_coords(lat: float | None, lon: float | None) -> bool:
+    return lat is not None and lon is not None
+
+
 def _drive_mins(lat1: float, lon1: float, lat2: float, lon2: float, mph: float = 24.0) -> int:
     """Haversine drive-time estimate in minutes at average urban speed."""
     R = 6371.0
@@ -426,11 +430,13 @@ def _decision_insight_for_location(
     # Commute — multi-anchor (commute_anchors) takes priority over single commute_anchor
     effective_anchors: list[dict] = []
     if commute_anchors:
-        effective_anchors = [a for a in commute_anchors if a.get("lat") and a.get("lon")]
-    elif commute_anchor and commute_anchor.get("lat") and commute_anchor.get("lon"):
+        effective_anchors = [
+            a for a in commute_anchors if _has_coords(a.get("lat"), a.get("lon"))
+        ]
+    elif commute_anchor and _has_coords(commute_anchor.get("lat"), commute_anchor.get("lon")):
         effective_anchors = [{**commute_anchor, "weight": 1.0}]
 
-    if effective_anchors and loc.lat and loc.lon:
+    if effective_anchors and _has_coords(loc.lat, loc.lon):
         total_w = sum(a.get("weight", 1.0) for a in effective_anchors) or len(effective_anchors)
         anchor_score_sum = 0.0
         anchor_reason_parts: list[str] = []
@@ -445,11 +451,11 @@ def _decision_insight_for_location(
         reasons.append(" · ".join(anchor_reason_parts[:2]))
 
     # Proximity: nearest gym, grocery, or high-weight POI (conditional)
-    if nearby_locs and loc.lat and loc.lon:
-        gyms = [l for l in nearby_locs if isinstance(l, Gym) and l.lat and l.lon]
+    if nearby_locs and _has_coords(loc.lat, loc.lon):
+        gyms = [l for l in nearby_locs if isinstance(l, Gym) and _has_coords(l.lat, l.lon)]
         priority_pois = [
             l for l in nearby_locs
-            if isinstance(l, PointOfInterest) and l.lat and l.lon
+            if isinstance(l, PointOfInterest) and _has_coords(l.lat, l.lon)
             and (l.category == "grocery" or (l.weight or 0.0) >= 0.5)
         ]
         cat_scores: list[float] = []
@@ -547,6 +553,50 @@ def _decision_insight_for_location(
         "components": {k: int(round(v)) for k, v in components.items()},
         "reasons": reasons[:4],
         "version": "v3",
+    }
+
+
+def _profile_compat_fields_for_apartment(
+    loc: Apartment,
+    units: list,
+    active_profile: dict | None,
+    decision_insight: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return compatibility fields for the profile-first scoring rollout."""
+    constraints = (active_profile or {}).get("constraints", {})
+    max_true_monthly = constraints.get("max_true_monthly")
+    min_bedrooms = constraints.get("min_bedrooms")
+
+    priced = [u.price_min for u in units if u.price_min is not None]
+    cheapest = min(priced) if priced else None
+    bedrooms = [u.bed for u in units if u.bed is not None]
+    max_known_bedrooms = max(bedrooms) if bedrooms else None
+
+    failed_constraints: list[str] = []
+    if max_true_monthly is not None and cheapest is not None and cheapest > max_true_monthly:
+        failed_constraints.append(f"Minimum known rent exceeds ${max_true_monthly:,}/mo")
+    if min_bedrooms is not None and max_known_bedrooms is not None and max_known_bedrooms < min_bedrooms:
+        failed_constraints.append(f"No floor plan meets {min_bedrooms}+ bedrooms")
+
+    if cheapest is None:
+        confidence = "low"
+        data_gaps = ["Missing floor-plan pricing"]
+    elif len(units) <= 1:
+        confidence = "medium"
+        data_gaps = ["Limited unit data"]
+    else:
+        confidence = "high"
+        data_gaps = []
+
+    return {
+        "profile_name": (active_profile or {}).get("name"),
+        "eligibility": {
+            "passed": len(failed_constraints) == 0,
+            "failed_constraints": failed_constraints,
+        },
+        "confidence": confidence,
+        "data_gaps": data_gaps,
+        "decision_insight": decision_insight,
     }
 
 
