@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
@@ -78,6 +79,8 @@ async def list_profiles(db: aiosqlite.Connection) -> list[dict[str, Any]]:
         """
     )
     rows = await cur.fetchall()
+    profile_ids = [r["id"] for r in rows]
+    commute_scenarios_by_profile = await list_profile_commute_scenarios_for_profiles(db, profile_ids)
     out: list[dict[str, Any]] = []
     for r in rows:
         profile_id = r["id"]
@@ -104,7 +107,7 @@ async def list_profiles(db: aiosqlite.Connection) -> list[dict[str, Any]]:
                     "proximity": r["proximity_w"] or 0.0,
                     "quality": r["quality_w"] or 0.0,
                 },
-                "commute_scenarios": await list_profile_commute_scenarios(db, profile_id),
+                "commute_scenarios": commute_scenarios_by_profile.get(profile_id, []),
             }
         )
     return out
@@ -180,27 +183,41 @@ async def set_active_profile(db: aiosqlite.Connection, profile_id: int) -> bool:
 
 
 async def list_profile_commute_scenarios(db: aiosqlite.Connection, profile_id: int) -> list[dict[str, Any]]:
+    scenarios_by_profile = await list_profile_commute_scenarios_for_profiles(db, [profile_id])
+    return scenarios_by_profile.get(profile_id, [])
+
+
+async def list_profile_commute_scenarios_for_profiles(
+    db: aiosqlite.Connection,
+    profile_ids: list[int],
+) -> dict[int, list[dict[str, Any]]]:
+    if not profile_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in profile_ids)
     cur = await db.execute(
-        """
+        f"""
         SELECT id, profile_id, name, lat, lon, probability
         FROM profile_commute_scenarios
-        WHERE profile_id=?
-        ORDER BY id ASC
+        WHERE profile_id IN ({placeholders})
+        ORDER BY profile_id ASC, id ASC
         """,
-        (profile_id,),
+        tuple(profile_ids),
     )
     rows = await cur.fetchall()
-    return [
-        {
-            "id": r["id"],
-            "profile_id": r["profile_id"],
-            "name": r["name"],
-            "lat": r["lat"],
-            "lon": r["lon"],
-            "probability": r["probability"],
-        }
-        for r in rows
-    ]
+    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        grouped[r["profile_id"]].append(
+            {
+                "id": r["id"],
+                "profile_id": r["profile_id"],
+                "name": r["name"],
+                "lat": r["lat"],
+                "lon": r["lon"],
+                "probability": r["probability"],
+            }
+        )
+    return dict(grouped)
 
 
 async def update_profile(

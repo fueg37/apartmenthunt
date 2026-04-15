@@ -621,6 +621,10 @@ async def api_locations(
     async with get_db() as db:
         await profiles_db.ensure_default_profile(db)
         active_profile = await profiles_db.get_active_profile(db)
+        if active_profile and active_profile.get("id"):
+            active_profile["commute_scenarios"] = (
+                await profiles_db.list_profile_commute_scenarios(db, active_profile["id"])
+            )
         all_locations = await list_all(db, None)  # fetch all types for scoring context
         commute_anchor = await get_setting(db, "commute_anchor")
         commute_anchors_setting = await get_setting(db, "commute_anchors")
@@ -644,10 +648,6 @@ async def api_locations(
                 d["units"] = [_unit_to_dict(u) for u in units]
                 d["available_count"] = sum(1 for u in units if u.available)
                 d["price_range"] = _format_price_range(unit_price_mins)
-                if active_profile and active_profile.get("id"):
-                    active_profile["commute_scenarios"] = await profiles_db.list_profile_commute_scenarios(
-                        db, active_profile["id"]
-                    )
                 decision = score_apartment_profile_v1(
                     apartment=loc,
                     units=units,
@@ -753,6 +753,10 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
     async with get_db() as db:
         await profiles_db.ensure_default_profile(db)
         active_profile = await profiles_db.get_active_profile(db)
+        if active_profile and active_profile.get("id"):
+            active_profile["commute_scenarios"] = (
+                await profiles_db.list_profile_commute_scenarios(db, active_profile["id"])
+            )
         loc = await get_by_id(db, loc_id)
         if not loc:
             raise HTTPException(404, "Location not found")
@@ -771,10 +775,6 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
             units = await get_latest_units(db, loc.id)
             d["units"] = [_unit_to_dict(u) for u in units]
             d["available_count"] = sum(1 for u in units if u.available)
-            if active_profile and active_profile.get("id"):
-                active_profile["commute_scenarios"] = await profiles_db.list_profile_commute_scenarios(
-                    db, active_profile["id"]
-                )
             decision = score_apartment_profile_v1(
                 apartment=loc,
                 units=units,
