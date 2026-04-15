@@ -80,9 +80,10 @@ async def list_profiles(db: aiosqlite.Connection) -> list[dict[str, Any]]:
     rows = await cur.fetchall()
     out: list[dict[str, Any]] = []
     for r in rows:
+        profile_id = r["id"]
         out.append(
             {
-                "id": r["id"],
+                "id": profile_id,
                 "name": r["name"],
                 "is_active": bool(r["is_active"]),
                 "created_at": r["created_at"],
@@ -103,6 +104,7 @@ async def list_profiles(db: aiosqlite.Connection) -> list[dict[str, Any]]:
                     "proximity": r["proximity_w"] or 0.0,
                     "quality": r["quality_w"] or 0.0,
                 },
+                "commute_scenarios": await list_profile_commute_scenarios(db, profile_id),
             }
         )
     return out
@@ -151,6 +153,15 @@ async def create_profile(db: aiosqlite.Connection, name: str) -> dict[str, Any]:
     raise RuntimeError("Profile could not be created")
 
 
+async def get_profile_by_id(db: aiosqlite.Connection, profile_id: int) -> dict[str, Any] | None:
+    profiles = await list_profiles(db)
+    for p in profiles:
+        if p["id"] == profile_id:
+            p["commute_scenarios"] = await list_profile_commute_scenarios(db, profile_id)
+            return p
+    return None
+
+
 async def set_active_profile(db: aiosqlite.Connection, profile_id: int) -> bool:
     await ensure_default_profile(db)
     cur = await db.execute("SELECT id FROM profiles WHERE id=?", (profile_id,))
@@ -166,6 +177,110 @@ async def set_active_profile(db: aiosqlite.Connection, profile_id: int) -> bool:
     )
     await db.commit()
     return True
+
+
+async def list_profile_commute_scenarios(db: aiosqlite.Connection, profile_id: int) -> list[dict[str, Any]]:
+    cur = await db.execute(
+        """
+        SELECT id, profile_id, name, lat, lon, probability
+        FROM profile_commute_scenarios
+        WHERE profile_id=?
+        ORDER BY id ASC
+        """,
+        (profile_id,),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "profile_id": r["profile_id"],
+            "name": r["name"],
+            "lat": r["lat"],
+            "lon": r["lon"],
+            "probability": r["probability"],
+        }
+        for r in rows
+    ]
+
+
+async def update_profile(
+    db: aiosqlite.Connection,
+    profile_id: int,
+    constraints: dict[str, Any] | None = None,
+    weights: dict[str, float] | None = None,
+    commute_scenarios: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    now = datetime.utcnow().isoformat()
+    cur = await db.execute("SELECT id FROM profiles WHERE id=?", (profile_id,))
+    row = await cur.fetchone()
+    if not row:
+        return None
+
+    if constraints is not None:
+        await db.execute(
+            """
+            UPDATE profile_constraints
+               SET max_true_monthly=?,
+                   max_expected_commute_mins=?,
+                   min_bedrooms=?,
+                   required_subtypes_json=?,
+                   required_amenities_json=?
+             WHERE profile_id=?
+            """,
+            (
+                constraints.get("max_true_monthly"),
+                constraints.get("max_expected_commute_mins"),
+                constraints.get("min_bedrooms"),
+                json.dumps(constraints.get("required_subtypes", [])),
+                json.dumps(constraints.get("required_amenities", [])),
+                profile_id,
+            ),
+        )
+
+    if weights is not None:
+        await db.execute(
+            """
+            UPDATE profile_weights
+               SET affordability_w=?,
+                   commute_w=?,
+                   type_fit_w=?,
+                   space_w=?,
+                   amenities_w=?,
+                   proximity_w=?,
+                   quality_w=?
+             WHERE profile_id=?
+            """,
+            (
+                weights.get("affordability", 0.0),
+                weights.get("commute", 0.0),
+                weights.get("type_fit", 0.0),
+                weights.get("space", 0.0),
+                weights.get("amenities", 0.0),
+                weights.get("proximity", 0.0),
+                weights.get("quality", 0.0),
+                profile_id,
+            ),
+        )
+
+    if commute_scenarios is not None:
+        await db.execute("DELETE FROM profile_commute_scenarios WHERE profile_id=?", (profile_id,))
+        for item in commute_scenarios:
+            await db.execute(
+                """
+                INSERT INTO profile_commute_scenarios(profile_id, name, lat, lon, probability)
+                VALUES (?,?,?,?,?)
+                """,
+                (
+                    profile_id,
+                    item["name"],
+                    item["lat"],
+                    item["lon"],
+                    float(item.get("probability", 1.0)),
+                ),
+            )
+    await db.execute("UPDATE profiles SET updated_at=? WHERE id=?", (now, profile_id))
+    await db.commit()
+    return await get_profile_by_id(db, profile_id)
 
 
 def _loads_json_list(value: Any) -> list[str]:

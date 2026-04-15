@@ -27,6 +27,7 @@ import db.discoveries as disc_db
 import db.visits as visits_db
 import db.profiles as profiles_db
 from models import Apartment, Gym, Hospital, LocationType, PointOfInterest
+from scoring.engine import score_apartment_profile_v1
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,37 @@ class CommuteAnchorsRequest(BaseModel):
 
 class ProfileCreateRequest(BaseModel):
     name: str
+
+
+class ProfileConstraintsPatch(BaseModel):
+    max_true_monthly: int | None = None
+    max_expected_commute_mins: int | None = None
+    min_bedrooms: int | None = None
+    required_subtypes: list[str] = Field(default_factory=list)
+    required_amenities: list[str] = Field(default_factory=list)
+
+
+class ProfileWeightsPatch(BaseModel):
+    affordability: float = 0.35
+    commute: float = 0.20
+    type_fit: float = 0.10
+    space: float = 0.10
+    amenities: float = 0.10
+    proximity: float = 0.10
+    quality: float = 0.05
+
+
+class ProfileCommuteScenarioPatch(BaseModel):
+    name: str
+    lat: float
+    lon: float
+    probability: float = 1.0
+
+
+class ProfilePatchRequest(BaseModel):
+    constraints: ProfileConstraintsPatch | None = None
+    weights: ProfileWeightsPatch | None = None
+    commute_scenarios: list[ProfileCommuteScenarioPatch] | None = None
 
 
 class CostDetailsRequest(BaseModel):
@@ -612,11 +644,24 @@ async def api_locations(
                 d["units"] = [_unit_to_dict(u) for u in units]
                 d["available_count"] = sum(1 for u in units if u.available)
                 d["price_range"] = _format_price_range(unit_price_mins)
-                decision_insight = _decision_insight_for_location(
-                    loc, units, commute_anchor, nearby_locs,
-                    commute_anchors=commute_anchors_setting,
+                if active_profile and active_profile.get("id"):
+                    active_profile["commute_scenarios"] = await profiles_db.list_profile_commute_scenarios(
+                        db, active_profile["id"]
+                    )
+                decision = score_apartment_profile_v1(
+                    apartment=loc,
+                    units=units,
+                    nearby_locs=nearby_locs,
+                    profile=active_profile,
+                    fallback_anchors=commute_anchors_setting,
                 )
-                d.update(_profile_compat_fields_for_apartment(loc, units, active_profile, decision_insight))
+                d["decision_insight"] = decision.model_dump(
+                    include={"score", "tier", "summary", "components", "reasons", "version"}
+                )
+                d["profile_name"] = (active_profile or {}).get("name")
+                d["eligibility"] = decision.eligibility
+                d["confidence"] = decision.confidence
+                d["data_gaps"] = decision.data_gaps
                 if available and not any(u.available for u in units):
                     continue
                 if max_price is not None:
@@ -726,11 +771,24 @@ async def api_location_detail(loc_id: int) -> JSONResponse:
             units = await get_latest_units(db, loc.id)
             d["units"] = [_unit_to_dict(u) for u in units]
             d["available_count"] = sum(1 for u in units if u.available)
-            decision_insight = _decision_insight_for_location(
-                loc, units, commute_anchor, nearby_locs,
-                commute_anchors=commute_anchors_setting,
+            if active_profile and active_profile.get("id"):
+                active_profile["commute_scenarios"] = await profiles_db.list_profile_commute_scenarios(
+                    db, active_profile["id"]
+                )
+            decision = score_apartment_profile_v1(
+                apartment=loc,
+                units=units,
+                nearby_locs=nearby_locs,
+                profile=active_profile,
+                fallback_anchors=commute_anchors_setting,
             )
-            d.update(_profile_compat_fields_for_apartment(loc, units, active_profile, decision_insight))
+            d["decision_insight"] = decision.model_dump(
+                include={"score", "tier", "summary", "components", "reasons", "version"}
+            )
+            d["profile_name"] = (active_profile or {}).get("name")
+            d["eligibility"] = decision.eligibility
+            d["confidence"] = decision.confidence
+            d["data_gaps"] = decision.data_gaps
         else:
             d["decision_insight"] = _decision_insight_for_location(
                 loc, commute_anchor=commute_anchor, nearby_locs=nearby_locs,
@@ -771,6 +829,28 @@ async def api_create_profile(payload: ProfileCreateRequest) -> JSONResponse:
     return JSONResponse(profile, status_code=201)
 
 
+@app.patch("/api/profiles/{profile_id}")
+async def api_update_profile(profile_id: int, payload: ProfilePatchRequest) -> JSONResponse:
+    constraints = payload.constraints.model_dump() if payload.constraints else None
+    weights = payload.weights.model_dump() if payload.weights else None
+    commute_scenarios = (
+        [s.model_dump() for s in payload.commute_scenarios]
+        if payload.commute_scenarios is not None
+        else None
+    )
+    async with get_db() as db:
+        updated = await profiles_db.update_profile(
+            db,
+            profile_id=profile_id,
+            constraints=constraints,
+            weights=weights,
+            commute_scenarios=commute_scenarios,
+        )
+    if not updated:
+        raise HTTPException(404, "Profile not found")
+    return JSONResponse(updated)
+
+
 @app.post("/api/profiles/{profile_id}/activate")
 async def api_activate_profile(profile_id: int) -> JSONResponse:
     async with get_db() as db:
@@ -779,6 +859,48 @@ async def api_activate_profile(profile_id: int) -> JSONResponse:
             raise HTTPException(404, "Profile not found")
         active = await profiles_db.get_active_profile(db)
     return JSONResponse({"status": "ok", "active_profile": active})
+
+
+@app.get("/api/profiles/{profile_id}/score-preview")
+async def api_profile_score_preview(profile_id: int) -> JSONResponse:
+    async with get_db() as db:
+        profile = await profiles_db.get_profile_by_id(db, profile_id)
+        if not profile:
+            raise HTTPException(404, "Profile not found")
+        all_locations = await list_all(db, None)
+        nearby_locs = [
+            l for l in all_locations
+            if isinstance(l, Gym)
+            or (isinstance(l, PointOfInterest) and (
+                l.category == "grocery" or (l.weight or 0.0) >= 0.5
+            ))
+        ]
+        profile["commute_scenarios"] = await profiles_db.list_profile_commute_scenarios(db, profile_id)
+
+        out: list[dict[str, Any]] = []
+        for loc in all_locations:
+            if not isinstance(loc, Apartment):
+                continue
+            units = await get_latest_units(db, loc.id)
+            result = score_apartment_profile_v1(
+                apartment=loc,
+                units=units,
+                nearby_locs=nearby_locs,
+                profile=profile,
+            )
+            out.append(
+                {
+                    "location_id": loc.id,
+                    "name": loc.name,
+                    "score": result.score,
+                    "tier": result.tier,
+                    "eligibility": result.eligibility,
+                    "confidence": result.confidence,
+                }
+            )
+
+    out.sort(key=lambda x: x["score"], reverse=True)
+    return JSONResponse({"profile_id": profile_id, "results": out})
 
 
 # ── Commute anchor settings ──────────────────────────────────────────────────
