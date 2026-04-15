@@ -233,17 +233,27 @@ async def update_profile(
     if not row:
         return None
 
-    if constraints is not None:
+    existing_constraints = None
+    existing_weights = None
+    if constraints is not None or weights is not None:
         cur = await db.execute(
             """
-            SELECT max_true_monthly, max_expected_commute_mins, min_bedrooms,
-                   required_subtypes_json, required_amenities_json
-            FROM profile_constraints
-            WHERE profile_id=?
+            SELECT c.max_true_monthly, c.max_expected_commute_mins, c.min_bedrooms,
+                   c.required_subtypes_json, c.required_amenities_json,
+                   w.affordability_w, w.commute_w, w.type_fit_w, w.space_w,
+                   w.amenities_w, w.proximity_w, w.quality_w
+            FROM profiles p
+            LEFT JOIN profile_constraints c ON c.profile_id = p.id
+            LEFT JOIN profile_weights w ON w.profile_id = p.id
+            WHERE p.id=?
             """,
             (profile_id,),
         )
-        existing_constraints = await cur.fetchone()
+        existing_row = await cur.fetchone()
+        existing_constraints = existing_row
+        existing_weights = existing_row
+
+    if constraints is not None:
         merged_constraints = {
             "max_true_monthly": (
                 existing_constraints["max_true_monthly"] if existing_constraints else None
@@ -263,7 +273,9 @@ async def update_profile(
                 else []
             ),
         }
-        merged_constraints.update(constraints)
+        for key in ("max_true_monthly", "max_expected_commute_mins", "min_bedrooms", "required_subtypes", "required_amenities"):
+            if key in constraints:
+                merged_constraints[key] = constraints[key]
         await db.execute(
             """
             UPDATE profile_constraints
@@ -285,16 +297,6 @@ async def update_profile(
         )
 
     if weights is not None:
-        cur = await db.execute(
-            """
-            SELECT affordability_w, commute_w, type_fit_w, space_w,
-                   amenities_w, proximity_w, quality_w
-            FROM profile_weights
-            WHERE profile_id=?
-            """,
-            (profile_id,),
-        )
-        existing_weights = await cur.fetchone()
         merged_weights = {
             "affordability": existing_weights["affordability_w"] if existing_weights else 0.0,
             "commute": existing_weights["commute_w"] if existing_weights else 0.0,
@@ -304,7 +306,9 @@ async def update_profile(
             "proximity": existing_weights["proximity_w"] if existing_weights else 0.0,
             "quality": existing_weights["quality_w"] if existing_weights else 0.0,
         }
-        merged_weights.update(weights)
+        for key in ("affordability", "commute", "type_fit", "space", "amenities", "proximity", "quality"):
+            if key in weights:
+                merged_weights[key] = weights[key]
         await db.execute(
             """
             UPDATE profile_weights
