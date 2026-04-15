@@ -101,9 +101,9 @@ def score_apartment_profile_v1(
     commute_scenarios = profile.get("commute_scenarios") or fallback_anchors or []
 
     priced = [u.price_min for u in units if u.price_min is not None]
-    cheapest = min(priced) if priced else None
-    cost_snapshot = compute_true_monthly_cost(cheapest, (apartment.extra or {}).get("cost_details"))
-    true_monthly = cost_snapshot["true_monthly"] if cost_snapshot else None
+    base_monthly = min(priced) if priced else None
+    cost_snapshot = compute_true_monthly_cost(base_monthly, (apartment.extra or {}).get("cost_details"))
+    true_monthly = cost_snapshot["true_monthly"] if cost_snapshot else base_monthly
     max_bed = max([u.bed for u in units if u.bed is not None], default=None)
     subtype = (apartment.extra or {}).get("subtype")
     amenities = (apartment.extra or {}).get("amenities", [])
@@ -130,18 +130,15 @@ def score_apartment_profile_v1(
     data_gaps: list[str] = []
 
     # affordability
-    if cheapest is None:
+    if base_monthly is None:
         components["affordability"] = 45.0
         data_gaps.append("Missing floor-plan pricing")
     else:
-        effective_monthly = float(true_monthly if true_monthly is not None else cheapest)
+        effective_monthly = float(true_monthly)
         target = float(max_true_monthly or 3500)
         ratio = (effective_monthly - 1800) / max(1.0, target - 1800)
         components["affordability"] = _clamp((1.0 - math.sqrt(max(0.0, ratio))) * 100.0)
-        if true_monthly is not None:
-            reasons.append(f"Base rent ${cheapest:,}/mo · True monthly ${true_monthly:,}/mo")
-        else:
-            reasons.append(f"Lowest known rent starts at ${cheapest:,}/mo")
+        reasons.append(f"Base rent ${base_monthly:,}/mo · True monthly ${true_monthly:,}/mo")
 
     # commute expected utility
     commute_score, expected_mins = _expected_commute_score(apartment, commute_scenarios)
@@ -219,5 +216,13 @@ def score_apartment_profile_v1(
         reasons=reasons[:4],
         confidence=confidence,
         data_gaps=data_gaps,
-        eligibility={"passed": len(failed) == 0, "failed_constraints": failed},
+        eligibility={
+            "passed": len(failed) == 0,
+            "failed_constraints": failed,
+            "pricing": {
+                "base_monthly": base_monthly,
+                "true_monthly": true_monthly,
+                "cost_details": cost_snapshot,
+            },
+        },
     )
